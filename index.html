@@ -793,6 +793,22 @@
             }).format(amount);
         }
 
+        function parseDate(dateStr) {
+            if (!dateStr) return null;
+            // Handle various date formats: YYYY-MM-DD, DD/MM/YYYY, DD-MM-YYYY
+            let match = dateStr.match(/(\d{4})-(\d{2})-(\d{2})/);
+            if (match) {
+                return new Date(match[1], match[2] - 1, match[3]);
+            }
+            match = dateStr.match(/(\d{2})[\/\-](\d{2})[\/\-](\d{4})/);
+            if (match) {
+                return new Date(match[3], match[2] - 1, match[1]);
+            }
+            // Try native parsing as fallback
+            const parsed = new Date(dateStr);
+            return isNaN(parsed.getTime()) ? null : parsed;
+        }
+
         function populateFilters() {
             const orgs = [...new Set(allContracts.map(c => c.normalized.org).filter(Boolean))].sort();
             const types = [...new Set(allContracts.map(c => c.normalized.type).filter(Boolean))].sort();
@@ -924,37 +940,81 @@
                 });
             }
 
-            // 3. Potential contract splitting: same org + same company + same day
-            // This is more suspicious than just same company/same day
-            const orgCompanyDateGroups = {};
+            // 3. Contract splitting detection (evidence-based methodology)
+            // Based on IACRC, Open Contracting Partnership, and Transparency International guidelines:
+            // - Look for contracts within 30-day window (not just same day)
+            // - Flag when combined value exceeds legal thresholds
+            // - Flag when multiple contracts are clustered just under thresholds
+
+            const orgCompanyGroups = {};
             filteredContracts.forEach(c => {
                 if (c.normalized.company && c.normalized.org && c.normalized.date) {
-                    const key = `${c.normalized.org}|||${c.normalized.company}|||${c.normalized.date}`;
-                    if (!orgCompanyDateGroups[key]) {
-                        orgCompanyDateGroups[key] = {
+                    const key = `${c.normalized.org}|||${c.normalized.company}`;
+                    if (!orgCompanyGroups[key]) {
+                        orgCompanyGroups[key] = {
                             org: c.normalized.org,
                             company: c.normalized.company,
-                            date: c.normalized.date,
-                            contracts: [],
-                            totalAmount: 0
+                            contracts: []
                         };
                     }
-                    orgCompanyDateGroups[key].contracts.push(c);
-                    orgCompanyDateGroups[key].totalAmount += c.normalized.amount;
+                    orgCompanyGroups[key].contracts.push({
+                        date: parseDate(c.normalized.date),
+                        amount: c.normalized.amount,
+                        dateStr: c.normalized.date
+                    });
                 }
             });
 
-            // Only flag groups with 3+ contracts on same day OR high combined value (>30k)
-            Object.values(orgCompanyDateGroups).forEach(group => {
-                const count = group.contracts.length;
-                const isSuspicious = count >= 3 || (count >= 2 && group.totalAmount > 30000);
+            // Analyze each org+company pair for splitting patterns
+            Object.values(orgCompanyGroups).forEach(group => {
+                if (group.contracts.length < 2) return;
 
-                if (isSuspicious) {
-                    alerts.push({
-                        type: 'warning',
-                        title: `Possible fraccionament: ${group.company}`,
-                        description: `${count} contractes adjudicats per "${group.org}" a aquesta empresa el ${group.date}, per un total de ${formatAmount(group.totalAmount)}. Podria indicar fraccionament per evitar llindars.`
-                    });
+                // Sort by date
+                const sorted = group.contracts
+                    .filter(c => c.date) // only valid dates
+                    .sort((a, b) => a.date - b.date);
+
+                if (sorted.length < 2) return;
+
+                // Look for contracts within 30-day windows that combined exceed thresholds
+                for (let i = 0; i < sorted.length; i++) {
+                    const windowContracts = [sorted[i]];
+                    const windowStart = sorted[i].date;
+
+                    // Find all contracts within 30 days of this one
+                    for (let j = i + 1; j < sorted.length; j++) {
+                        const daysDiff = (sorted[j].date - windowStart) / (1000 * 60 * 60 * 24);
+                        if (daysDiff <= 30) {
+                            windowContracts.push(sorted[j]);
+                        } else {
+                            break; // sorted, so no more within window
+                        }
+                    }
+
+                    if (windowContracts.length >= 2) {
+                        const totalAmount = windowContracts.reduce((sum, c) => sum + c.amount, 0);
+                        const allUnderMinor = windowContracts.every(c => c.amount < THRESHOLDS.minor);
+                        const allUnderMinorWorks = windowContracts.every(c => c.amount < THRESHOLDS.minorWorks);
+
+                        // Red flag: multiple contracts all under threshold, but combined exceeds it
+                        const exceedsMinorThreshold = allUnderMinor && totalAmount >= THRESHOLDS.minor;
+                        const exceedsWorksThreshold = allUnderMinorWorks && totalAmount >= THRESHOLDS.minorWorks;
+
+                        if (exceedsMinorThreshold || exceedsWorksThreshold) {
+                            const threshold = exceedsWorksThreshold ? THRESHOLDS.minorWorks : THRESHOLDS.minor;
+                            const thresholdName = exceedsWorksThreshold ? '40.000€ (obres)' : '15.000€ (serveis)';
+
+                            alerts.push({
+                                type: 'alert',
+                                title: `Possible fraccionament: ${group.company}`,
+                                description: `${windowContracts.length} contractes de "${group.org}" a aquesta empresa en 30 dies (${windowContracts[0].dateStr} - ${windowContracts[windowContracts.length-1].dateStr}), tots per sota del llindar de ${thresholdName} pero amb un total de ${formatAmount(totalAmount)} que el supera.`
+                            });
+
+                            // Skip ahead to avoid duplicate alerts for overlapping windows
+                            i += windowContracts.length - 1;
+                            break;
+                        }
+                    }
                 }
             });
 
