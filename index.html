@@ -346,6 +346,59 @@
             border-radius: 4px;
             font-family: monospace;
         }
+
+        .debug-panel {
+            background: #2d2d2d;
+            color: #e0e0e0;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            font-family: monospace;
+            font-size: 0.85em;
+        }
+
+        .debug-panel h3 {
+            color: #4fc3f7;
+            margin-bottom: 15px;
+        }
+
+        .debug-panel .mapping {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .debug-panel .field-name {
+            color: #81c784;
+            min-width: 100px;
+        }
+
+        .debug-panel .column-name {
+            color: #fff59d;
+        }
+
+        .debug-panel .not-found {
+            color: #ef5350;
+        }
+
+        .debug-panel details {
+            margin-top: 15px;
+        }
+
+        .debug-panel summary {
+            cursor: pointer;
+            color: #4fc3f7;
+        }
+
+        .debug-panel .all-headers {
+            margin-top: 10px;
+            padding: 10px;
+            background: #1a1a1a;
+            border-radius: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+            word-break: break-all;
+        }
     </style>
 </head>
 <body>
@@ -381,6 +434,15 @@
         </div>
 
         <div id="results" class="hidden">
+            <div class="debug-panel" id="debug-panel">
+                <h3>Columnes detectades del CSV</h3>
+                <div id="column-mappings"></div>
+                <details>
+                    <summary>Veure totes les columnes del CSV</summary>
+                    <div class="all-headers" id="all-headers"></div>
+                </details>
+            </div>
+
             <div class="stats-grid">
                 <div class="stat-card">
                     <h3>Total Contractes</h3>
@@ -465,12 +527,47 @@
         const itemsPerPage = 50;
         let sortColumn = 'date';
         let sortDirection = 'desc';
+        let csvHeaders = []; // Store headers for debugging
 
         // Thresholds for contract types (simplified - actual thresholds vary)
         const THRESHOLDS = {
             minor: 15000,      // Contractes menors serveis/subministraments
             minorWorks: 40000, // Contractes menors obres
             negotiated: 60000  // Procediment negociat
+        };
+
+        // Column mappings - ordered by priority (most specific first)
+        const COLUMN_MAPPINGS = {
+            org: [
+                'nom_ens', 'nom ens', 'ens', 'nom_organ', 'organ_contractacio',
+                'organisme', 'entitat', 'administracio'
+            ],
+            object: [
+                'objecte_contracte', 'objecte contracte', 'objecte', 'descripcio_contracte',
+                'descripcio', 'titol', 'nom_contracte', 'denominacio'
+            ],
+            company: [
+                'rao_social_adjudicatari', 'rao social adjudicatari', 'nom_adjudicatari',
+                'nom adjudicatari', 'adjudicatari_rao_social', 'empresa_adjudicataria',
+                'nom_empresa', 'rao_social', 'adjudicatari'
+            ],
+            nif: [
+                'nif_adjudicatari', 'nif adjudicatari', 'cif_adjudicatari',
+                'identificador_adjudicatari', 'nif', 'cif'
+            ],
+            amount: [
+                'import_adjudicacio_amb_iva', 'import_adjudicacio_sense_iva',
+                'import_adjudicacio', 'import adjudicacio', 'import_licitacio',
+                'preu_adjudicacio', 'valor_estimat', 'import', 'preu', 'valor'
+            ],
+            date: [
+                'data_adjudicacio', 'data adjudicacio', 'data_formalitzacio',
+                'data_publicacio', 'data_inici', 'data'
+            ],
+            type: [
+                'tipus_contracte', 'tipus contracte', 'procediment_adjudicacio',
+                'procediment', 'tipus_procediment', 'tipus'
+            ]
         };
 
         // Upload handling
@@ -512,37 +609,68 @@
         function parseCSV(text) {
             const lines = text.split('\n');
             const headers = parseCSVLine(lines[0]);
+            csvHeaders = headers.map(h => h.trim().toLowerCase());
+
+            // Log headers to console for debugging
+            console.log('CSV Headers found:', csvHeaders);
 
             allContracts = [];
+
+            // Create header index map for faster lookup
+            const headerIndex = {};
+            csvHeaders.forEach((header, index) => {
+                headerIndex[header] = index;
+            });
+
+            // Find the best matching column for each field type
+            const columnMap = {};
+            for (const [fieldType, possibleNames] of Object.entries(COLUMN_MAPPINGS)) {
+                columnMap[fieldType] = findBestColumn(csvHeaders, possibleNames);
+                console.log(`Mapping ${fieldType} -> ${columnMap[fieldType]}`);
+            }
 
             for (let i = 1; i < lines.length; i++) {
                 if (!lines[i].trim()) continue;
 
                 const values = parseCSVLine(lines[i]);
-                const contract = {};
 
-                headers.forEach((header, index) => {
-                    contract[header.trim().toLowerCase()] = values[index] || '';
+                // Create contract object with normalized fields
+                const contract = {
+                    raw: {},
+                    normalized: {}
+                };
+
+                // Store raw values
+                csvHeaders.forEach((header, index) => {
+                    contract.raw[header] = values[index] || '';
                 });
 
-                // Normalize field names (the CSV might have different column names)
+                // Map to normalized fields using our column mapping
                 contract.normalized = {
-                    org: findField(contract, ['ens', 'organisme', 'entitat', 'organ_contractacio', 'nom_organ']),
-                    object: findField(contract, ['objecte', 'descripcio', 'titol', 'nom_contracte']),
-                    company: findField(contract, ['adjudicatari', 'empresa', 'raó_social', 'nom_empresa', 'rao_social']),
-                    nif: findField(contract, ['nif', 'cif', 'nif_adjudicatari']),
-                    amount: parseAmount(findField(contract, ['import', 'preu', 'valor', 'import_adjudicacio', 'import_licitacio'])),
-                    date: findField(contract, ['data', 'data_adjudicacio', 'data_publicacio', 'data_formalitzacio']),
-                    type: findField(contract, ['tipus', 'procediment', 'tipus_contracte', 'tipus_procediment'])
+                    org: columnMap.org ? (contract.raw[columnMap.org] || '') : '',
+                    object: columnMap.object ? (contract.raw[columnMap.object] || '') : '',
+                    company: columnMap.company ? (contract.raw[columnMap.company] || '') : '',
+                    nif: columnMap.nif ? (contract.raw[columnMap.nif] || '') : '',
+                    amount: parseAmount(columnMap.amount ? (contract.raw[columnMap.amount] || '') : ''),
+                    date: columnMap.date ? (contract.raw[columnMap.date] || '') : '',
+                    type: columnMap.type ? (contract.raw[columnMap.type] || '') : ''
                 };
 
                 allContracts.push(contract);
             }
 
+            console.log('Total contracts loaded:', allContracts.length);
+            console.log('Sample contract:', allContracts[0]);
+
+            // Update debug panel
+            updateDebugPanel(columnMap);
+
             // Filter for Sabadell if possible
             const sabadellContracts = allContracts.filter(c =>
                 c.normalized.org.toLowerCase().includes('sabadell')
             );
+
+            console.log('Sabadell contracts found:', sabadellContracts.length);
 
             if (sabadellContracts.length > 0) {
                 filteredContracts = sabadellContracts;
@@ -580,15 +708,67 @@
             return result;
         }
 
-        function findField(contract, possibleNames) {
+        function findBestColumn(headers, possibleNames) {
+            // First pass: exact match
             for (const name of possibleNames) {
-                for (const key in contract) {
-                    if (key.includes(name) || name.includes(key)) {
-                        return contract[key];
-                    }
-                }
+                const exactMatch = headers.find(h => h === name);
+                if (exactMatch) return exactMatch;
             }
-            return '';
+
+            // Second pass: contains match (but be careful with order)
+            for (const name of possibleNames) {
+                const containsMatch = headers.find(h => h.includes(name) && !isExcludedMatch(h, name));
+                if (containsMatch) return containsMatch;
+            }
+
+            return null;
+        }
+
+        // Avoid matching NIF fields when looking for company names, etc.
+        function isExcludedMatch(header, searchTerm) {
+            // If searching for 'adjudicatari' but header is 'nif_adjudicatari', skip it
+            if (searchTerm === 'adjudicatari' && header.includes('nif')) return true;
+            if (searchTerm === 'adjudicatari' && header.includes('cif')) return true;
+            return false;
+        }
+
+        // Check if a string looks like a valid company name
+        function isInvalidCompanyName(name) {
+            if (!name) return true;
+            const upper = name.toUpperCase().trim();
+            // Invalid patterns: looks like NIF, too short, only numbers, only punctuation
+            if (upper === 'NIF' || upper === 'CIF') return true;
+            if (/^[A-Z]?\d{7,8}[A-Z]?$/.test(upper)) return true; // NIF pattern
+            if (/^\d+$/.test(upper)) return true; // Only numbers
+            if (/^[^a-zA-Z]+$/.test(upper)) return true; // No letters
+            if (upper.includes('NIF||')) return true; // Corrupted data pattern
+            if (upper.split('||').length > 2) return true; // Multiple delimiters
+            return false;
+        }
+
+        function updateDebugPanel(columnMap) {
+            const fieldLabels = {
+                org: 'Organisme',
+                object: 'Objecte',
+                company: 'Adjudicatari',
+                nif: 'NIF',
+                amount: 'Import',
+                date: 'Data',
+                type: 'Tipus'
+            };
+
+            const mappingsHtml = Object.entries(columnMap).map(([field, column]) => `
+                <div class="mapping">
+                    <span class="field-name">${fieldLabels[field]}:</span>
+                    ${column
+                        ? `<span class="column-name">"${column}"</span>`
+                        : `<span class="not-found">NO TROBAT</span>`
+                    }
+                </div>
+            `).join('');
+
+            document.getElementById('column-mappings').innerHTML = mappingsHtml;
+            document.getElementById('all-headers').innerHTML = csvHeaders.map(h => `"${h}"`).join(', ');
         }
 
         function parseAmount(value) {
@@ -701,7 +881,8 @@
             const companyAmounts = {};
             filteredContracts.forEach(c => {
                 const company = c.normalized.company;
-                if (company) {
+                // Skip invalid company names (too short, looks like a NIF, or contains only special chars)
+                if (company && company.length > 5 && !isInvalidCompanyName(company)) {
                     companyContracts[company] = (companyContracts[company] || 0) + 1;
                     companyAmounts[company] = (companyAmounts[company] || 0) + c.normalized.amount;
                 }
