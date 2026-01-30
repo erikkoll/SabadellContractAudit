@@ -191,6 +191,178 @@
             font-size: 0.9em;
         }
 
+        /* Grouped alerts by vendor */
+        .vendor-alert-group {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            overflow: hidden;
+        }
+
+        .vendor-alert-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            cursor: pointer;
+            background: #f8f9fa;
+            border-bottom: 1px solid #eee;
+            transition: background 0.2s;
+        }
+
+        .vendor-alert-header:hover {
+            background: #e9ecef;
+        }
+
+        .vendor-alert-header.has-critical {
+            background: #fdf2f2;
+            border-left: 4px solid #c0392b;
+        }
+
+        .vendor-alert-header.has-warning {
+            background: #fef9e7;
+            border-left: 4px solid #f39c12;
+        }
+
+        .vendor-alert-header.has-info {
+            background: #e8f4f8;
+            border-left: 4px solid #3498db;
+        }
+
+        .vendor-info {
+            flex: 1;
+        }
+
+        .vendor-info h4 {
+            margin: 0 0 5px 0;
+            color: #333;
+        }
+
+        .vendor-info .nif {
+            font-size: 0.85em;
+            color: #666;
+        }
+
+        .vendor-badges {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: 600;
+        }
+
+        .badge.alert-count {
+            background: #c0392b;
+            color: white;
+        }
+
+        .badge.warning-count {
+            background: #f39c12;
+            color: white;
+        }
+
+        .badge.info-count {
+            background: #3498db;
+            color: white;
+        }
+
+        .toggle-icon {
+            font-size: 1.2em;
+            color: #666;
+            transition: transform 0.3s;
+        }
+
+        .vendor-alert-group.expanded .toggle-icon {
+            transform: rotate(180deg);
+        }
+
+        .vendor-alert-details {
+            display: none;
+            padding: 0;
+        }
+
+        .vendor-alert-group.expanded .vendor-alert-details {
+            display: block;
+        }
+
+        .vendor-alert-item {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+            font-size: 0.9em;
+        }
+
+        .vendor-alert-item:last-child {
+            border-bottom: none;
+        }
+
+        .vendor-alert-item.alert-type {
+            background: #fdf2f2;
+            border-left: 3px solid #c0392b;
+        }
+
+        .vendor-alert-item.warning-type {
+            background: #fef9e7;
+            border-left: 3px solid #f39c12;
+        }
+
+        .vendor-alert-item.info-type {
+            background: #e8f4f8;
+            border-left: 3px solid #3498db;
+        }
+
+        .vendor-alert-item strong {
+            display: block;
+            margin-bottom: 3px;
+        }
+
+        .vendor-alert-item p {
+            margin: 0;
+            color: #555;
+        }
+
+        /* Global alerts (not vendor-specific) */
+        .global-alerts {
+            margin-bottom: 20px;
+        }
+
+        .global-alerts h3 {
+            margin-bottom: 10px;
+            color: #666;
+            font-size: 0.9em;
+            text-transform: uppercase;
+        }
+
+        .vendor-alerts-section h3 {
+            margin: 20px 0 10px 0;
+            color: #666;
+            font-size: 0.9em;
+            text-transform: uppercase;
+        }
+
+        .alerts-summary {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .alerts-summary .summary-item {
+            background: #f8f9fa;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 0.9em;
+        }
+
+        .alerts-summary .summary-item strong {
+            color: #1a5f7a;
+        }
+
         .filters {
             background: white;
             padding: 20px;
@@ -1001,14 +1173,23 @@
                 .sort((a, b) => b[1] - a[1])
                 .slice(0, 10);
 
+            // Build NIF lookup for company names
+            const companyToNif = {};
+            filteredContracts.forEach(c => {
+                if (c.normalized.company && c.normalized.nif) {
+                    companyToNif[c.normalized.company] = c.normalized.nif;
+                }
+            });
+
             // Alert for companies with disproportionate contracts
             topCompanies.forEach(([company, count]) => {
                 const percentage = (count / totalContracts * 100).toFixed(1);
                 if (percentage > 5 && count > 10) {
                     alerts.push({
                         type: 'warning',
-                        title: `Concentracio de contractes: ${company}`,
-                        description: `Aquesta empresa te ${count} contractes (${percentage}% del total), amb un import total de ${formatAmount(companyAmounts[company])}.`
+                        title: `Concentracio de contractes`,
+                        description: `Aquesta empresa te ${count} contractes (${percentage}% del total), amb un import total de ${formatAmount(companyAmounts[company])}.`,
+                        vendor: { nif: companyToNif[company] || '', company: company }
                     });
                 }
             });
@@ -1062,14 +1243,16 @@
                 if (allUnderMinor && group.totalAmount >= THRESHOLDS.minor) {
                     alerts.push({
                         type: 'alert',
-                        title: `Fraccionament CPV: ${group.company || group.nif}`,
-                        description: `${group.contracts.length} contractes menors al mateix proveidor (NIF: ${group.nif}) en el sector CPV ${group.cpvRoot}xxx durant ${group.year}. Total: ${formatAmount(group.totalAmount)} (supera 15.000€).`
+                        title: `Fraccionament CPV`,
+                        description: `${group.contracts.length} contractes menors en el sector CPV ${group.cpvRoot}xxx durant ${group.year}. Total: ${formatAmount(group.totalAmount)} (supera 15.000€).`,
+                        vendor: { nif: group.nif, company: group.company || '' }
                     });
                 } else if (allUnderWorks && group.totalAmount >= THRESHOLDS.minorWorks) {
                     alerts.push({
                         type: 'alert',
-                        title: `Fraccionament CPV (obres): ${group.company || group.nif}`,
-                        description: `${group.contracts.length} contractes menors al mateix proveidor (NIF: ${group.nif}) en el sector CPV ${group.cpvRoot}xxx durant ${group.year}. Total: ${formatAmount(group.totalAmount)} (supera 40.000€).`
+                        title: `Fraccionament CPV (obres)`,
+                        description: `${group.contracts.length} contractes menors en el sector CPV ${group.cpvRoot}xxx durant ${group.year}. Total: ${formatAmount(group.totalAmount)} (supera 40.000€).`,
+                        vendor: { nif: group.nif, company: group.company || '' }
                     });
                 }
             });
@@ -1121,15 +1304,17 @@
                                     alreadyFlaggedSemantic.add(alertKey);
                                     alerts.push({
                                         type: 'alert',
-                                        title: `Fraccionament semantic: ${group.company || group.nif}`,
-                                        description: `Contractes amb descripcions similars (${(similarity * 100).toFixed(0)}% similitud) al mateix proveidor durant ${group.year}. Exemple: "${c1.normalized.object.substring(0, 50)}..." Total combinat: ${formatAmount(combinedAmount)} (supera 15.000€).`
+                                        title: `Fraccionament semantic`,
+                                        description: `Contractes amb descripcions similars (${(similarity * 100).toFixed(0)}% similitud) durant ${group.year}. Exemple: "${c1.normalized.object.substring(0, 50)}..." Total combinat: ${formatAmount(combinedAmount)} (supera 15.000€).`,
+                                        vendor: { nif: group.nif, company: group.company || '' }
                                     });
                                 } else if (bothUnderWorks && combinedAmount >= THRESHOLDS.minorWorks) {
                                     alreadyFlaggedSemantic.add(alertKey);
                                     alerts.push({
                                         type: 'alert',
-                                        title: `Fraccionament semantic (obres): ${group.company || group.nif}`,
-                                        description: `Contractes amb descripcions similars (${(similarity * 100).toFixed(0)}% similitud) al mateix proveidor durant ${group.year}. Total combinat: ${formatAmount(combinedAmount)} (supera 40.000€).`
+                                        title: `Fraccionament semantic (obres)`,
+                                        description: `Contractes amb descripcions similars (${(similarity * 100).toFixed(0)}% similitud) durant ${group.year}. Total combinat: ${formatAmount(combinedAmount)} (supera 40.000€).`,
+                                        vendor: { nif: group.nif, company: group.company || '' }
                                     });
                                 }
                             }
@@ -1194,8 +1379,9 @@
                             const totalAmount = windowContracts.reduce((sum, c) => sum + c.amount, 0);
                             alerts.push({
                                 type: 'warning',
-                                title: `Alta velocitat: ${group.company || group.nif}`,
-                                description: `${windowContracts.length} contractes al mateix proveidor en 30 dies (${windowContracts[0].dateStr} - ${windowContracts[windowContracts.length - 1].dateStr}). Total: ${formatAmount(totalAmount)}. Risc d'urgencia o fraccionament.`
+                                title: `Alta velocitat`,
+                                description: `${windowContracts.length} contractes en 30 dies (${windowContracts[0].dateStr} - ${windowContracts[windowContracts.length - 1].dateStr}). Total: ${formatAmount(totalAmount)}. Risc d'urgencia o fraccionament.`,
+                                vendor: { nif: group.nif, company: group.company || '' }
                             });
                         }
                         // Skip ahead to avoid duplicate alerts
@@ -1329,8 +1515,9 @@
                     const percentage = ((v.amount / deptTotal) * 100).toFixed(1);
                     alerts.push({
                         type: 'warning',
-                        title: `Concentracio: ${v.company || v.nif} al ${v.dept.substring(0, 40)}...`,
-                        description: `Aquest proveidor rep el ${percentage}% del pressupost del departament durant ${v.year} (${formatAmount(v.amount)} de ${formatAmount(deptTotal)}).`
+                        title: `Concentracio departamental`,
+                        description: `Rep el ${percentage}% del pressupost de "${v.dept.substring(0, 40)}..." durant ${v.year} (${formatAmount(v.amount)} de ${formatAmount(deptTotal)}).`,
+                        vendor: { nif: v.nif, company: v.company || '' }
                     });
                 }
             });
@@ -1347,19 +1534,296 @@
                 });
             }
 
-            // Render alerts
+            // ----------------------------------------------------------
+            // 8. BENFORD'S LAW TEST (Second Digit Analysis)
+            // Natural numbers follow a specific distribution for second digits
+            // Fraudulent amounts often violate this pattern
+            // ----------------------------------------------------------
+            const benfordExpected = [0.12, 0.114, 0.109, 0.104, 0.100, 0.097, 0.093, 0.090, 0.088, 0.085];
+            const vendorSecondDigits = {};
+
+            filteredContracts.forEach(c => {
+                const nif = c.normalized.nif;
+                const amount = c.normalized.amount;
+                if (nif && amount > 100 && amount < THRESHOLDS.minor) {
+                    // Extract second digit from amount
+                    const amountStr = Math.floor(amount).toString();
+                    if (amountStr.length >= 2) {
+                        const secondDigit = parseInt(amountStr[1]);
+                        if (!vendorSecondDigits[nif]) {
+                            vendorSecondDigits[nif] = {
+                                nif: nif,
+                                company: c.normalized.company,
+                                digits: Array(10).fill(0),
+                                total: 0
+                            };
+                        }
+                        vendorSecondDigits[nif].digits[secondDigit]++;
+                        vendorSecondDigits[nif].total++;
+                    }
+                }
+            });
+
+            Object.values(vendorSecondDigits).forEach(v => {
+                if (v.total < 10) return; // Need minimum sample size
+
+                // Calculate chi-squared statistic for Benford deviation
+                let chiSquared = 0;
+                const observed = v.digits.map(d => d / v.total);
+
+                for (let i = 0; i < 10; i++) {
+                    const diff = observed[i] - benfordExpected[i];
+                    chiSquared += (diff * diff) / benfordExpected[i];
+                }
+
+                // Check for uniform distribution (too even = suspicious)
+                const isUniform = observed.every(o => o >= 0.08 && o <= 0.12);
+
+                // Check for digit spike (any digit > 20%)
+                const maxDigit = Math.max(...observed);
+                const maxDigitIndex = observed.indexOf(maxDigit);
+
+                if (chiSquared > 0.05 && (isUniform || maxDigit > 0.20)) {
+                    alerts.push({
+                        type: 'warning',
+                        title: `Benford anomalia`,
+                        description: isUniform
+                            ? `Distribucio massa uniforme dels segons digits en ${v.total} contractes. Patró antinatural que suggereix manipulacio.`
+                            : `El digit ${maxDigitIndex} apareix el ${(maxDigit * 100).toFixed(0)}% de les vegades en ${v.total} contractes (esperat: ~${(benfordExpected[maxDigitIndex] * 100).toFixed(0)}%). Possible manipulacio d'imports.`,
+                        vendor: { nif: v.nif, company: v.company || '' }
+                    });
+                }
+            });
+
+            // ----------------------------------------------------------
+            // 9. ROUNDEDNESS RATIO (Last Digit Analysis)
+            // Real costs rarely end in round numbers
+            // Fraudulent splits often use clean amounts
+            // ----------------------------------------------------------
+            const vendorRoundness = {};
+
+            filteredContracts.forEach(c => {
+                const nif = c.normalized.nif;
+                const amount = c.normalized.amount;
+                if (nif && amount > 0) {
+                    if (!vendorRoundness[nif]) {
+                        vendorRoundness[nif] = {
+                            nif: nif,
+                            company: c.normalized.company,
+                            total: 0,
+                            roundCount: 0
+                        };
+                    }
+                    vendorRoundness[nif].total++;
+                    // Check if divisible by 100 or 50 (round number)
+                    if (amount % 100 === 0 || amount % 50 === 0) {
+                        vendorRoundness[nif].roundCount++;
+                    }
+                }
+            });
+
+            Object.values(vendorRoundness).forEach(v => {
+                if (v.total < 5) return; // Need minimum contracts
+
+                const roundPercentage = (v.roundCount / v.total) * 100;
+                if (roundPercentage > 50) {
+                    alerts.push({
+                        type: 'warning',
+                        title: `Imports rodons`,
+                        description: `El ${roundPercentage.toFixed(0)}% dels ${v.total} contractes tenen imports rodons (divisibles per 50 o 100€). En costos reals, aixo es estrany.`,
+                        vendor: { nif: v.nif, company: v.company || '' }
+                    });
+                }
+            });
+
+            // ----------------------------------------------------------
+            // 10. CLUSTER HISTOGRAM (Density Analysis)
+            // Normal distribution: lots of small contracts, few large
+            // Suspicious: "bulge" near threshold indicates gaming
+            // ----------------------------------------------------------
+            const minorContracts = filteredContracts.filter(c =>
+                c.normalized.amount > 0 && c.normalized.amount < THRESHOLDS.minor
+            );
+
+            if (minorContracts.length > 50) {
+                // Count contracts in the €12k-15k range vs total
+                const nearThreshold = minorContracts.filter(c => c.normalized.amount >= 12000);
+                const ratio = nearThreshold.length / minorContracts.length;
+
+                if (ratio > 0.4) {
+                    alerts.push({
+                        type: 'alert',
+                        title: `Concentracio al llindar: ${(ratio * 100).toFixed(0)}% de contractes entre 12-15k€`,
+                        description: `El ${(ratio * 100).toFixed(0)}% dels contractes menors estan en el rang €12.000-€15.000 (${nearThreshold.length} de ${minorContracts.length}). Distribucio anormal que suggereix fraccionament sistematic.`
+                    });
+                }
+            }
+
+            // Same for works threshold
+            const minorWorksContracts = filteredContracts.filter(c =>
+                c.normalized.amount > 0 && c.normalized.amount < THRESHOLDS.minorWorks &&
+                c.normalized.type.toLowerCase().includes('obr')
+            );
+
+            if (minorWorksContracts.length > 30) {
+                const nearWorksThreshold = minorWorksContracts.filter(c => c.normalized.amount >= 32000);
+                const worksRatio = nearWorksThreshold.length / minorWorksContracts.length;
+
+                if (worksRatio > 0.4) {
+                    alerts.push({
+                        type: 'alert',
+                        title: `Concentracio obres: ${(worksRatio * 100).toFixed(0)}% de contractes entre 32-40k€`,
+                        description: `El ${(worksRatio * 100).toFixed(0)}% dels contractes menors d'obres estan en el rang €32.000-€40.000 (${nearWorksThreshold.length} de ${minorWorksContracts.length}). Distribucio anormal.`
+                    });
+                }
+            }
+
+            // ----------------------------------------------------------
+            // 11. DEPARTMENTAL MONOGAMY (Vendor Dependence)
+            // Legitimate companies have diverse clients
+            // Shell companies depend on single department
+            // ----------------------------------------------------------
+            const vendorDeptRevenue = {};
+            const vendorTotalRevenue = {};
+
+            filteredContracts.forEach(c => {
+                const nif = c.normalized.nif;
+                const dept = c.normalized.department || c.normalized.org;
+                const amount = c.normalized.amount;
+
+                if (nif && dept && amount > 0) {
+                    if (!vendorTotalRevenue[nif]) {
+                        vendorTotalRevenue[nif] = {
+                            nif: nif,
+                            company: c.normalized.company,
+                            total: 0,
+                            contractCount: 0,
+                            depts: {}
+                        };
+                    }
+                    vendorTotalRevenue[nif].total += amount;
+                    vendorTotalRevenue[nif].contractCount++;
+                    vendorTotalRevenue[nif].depts[dept] = (vendorTotalRevenue[nif].depts[dept] || 0) + amount;
+                }
+            });
+
+            Object.values(vendorTotalRevenue).forEach(v => {
+                if (v.contractCount < 4) return; // Need minimum activity
+
+                // Find the department with highest revenue
+                const deptAmounts = Object.entries(v.depts);
+                if (deptAmounts.length === 0) return;
+
+                deptAmounts.sort((a, b) => b[1] - a[1]);
+                const [topDept, topAmount] = deptAmounts[0];
+                const dependenceRatio = topAmount / v.total;
+
+                if (dependenceRatio > 0.9 && v.total > 20000) {
+                    alerts.push({
+                        type: 'warning',
+                        title: `Monogamia departamental`,
+                        description: `Rep el ${(dependenceRatio * 100).toFixed(0)}% dels seus ingressos (${formatAmount(topAmount)} de ${formatAmount(v.total)}) d'un sol departament. Risc d'empresa pantalla.`,
+                        vendor: { nif: v.nif, company: v.company || '' }
+                    });
+                }
+            });
+
+            // Render alerts - grouped by vendor
             const alertsContainer = document.getElementById('alerts-container');
             document.getElementById('alerts-count').textContent = alerts.length;
 
             if (alerts.length === 0) {
                 alertsContainer.innerHTML = '<p class="alert info"><strong>Cap alerta detectada.</strong> Les dades no mostren patrons sospitosos evidents. Aixo no garanteix l\'absencia d\'irregularitats.</p>';
             } else {
-                alertsContainer.innerHTML = alerts.map(a => `
-                    <div class="alert ${a.type}">
-                        <h4>${a.title}</h4>
-                        <p>${a.description}</p>
-                    </div>
-                `).join('');
+                // Separate global alerts from vendor-specific alerts
+                const globalAlerts = alerts.filter(a => !a.vendor);
+                const vendorAlerts = alerts.filter(a => a.vendor);
+
+                // Group vendor alerts by NIF
+                const vendorGroups = {};
+                vendorAlerts.forEach(a => {
+                    const key = a.vendor.nif || a.vendor.company || 'unknown';
+                    if (!vendorGroups[key]) {
+                        vendorGroups[key] = {
+                            nif: a.vendor.nif,
+                            company: a.vendor.company,
+                            alerts: [],
+                            alertCount: 0,
+                            warningCount: 0,
+                            infoCount: 0
+                        };
+                    }
+                    vendorGroups[key].alerts.push(a);
+                    if (a.type === 'alert') vendorGroups[key].alertCount++;
+                    else if (a.type === 'warning') vendorGroups[key].warningCount++;
+                    else vendorGroups[key].infoCount++;
+                });
+
+                // Sort vendor groups by severity (most alerts first)
+                const sortedVendors = Object.values(vendorGroups).sort((a, b) => {
+                    const scoreA = a.alertCount * 100 + a.warningCount * 10 + a.infoCount;
+                    const scoreB = b.alertCount * 100 + b.warningCount * 10 + b.infoCount;
+                    return scoreB - scoreA;
+                });
+
+                let html = '';
+
+                // Summary
+                html += `<div class="alerts-summary">
+                    <div class="summary-item"><strong>${globalAlerts.length}</strong> alertes globals</div>
+                    <div class="summary-item"><strong>${sortedVendors.length}</strong> proveidors amb alertes</div>
+                    <div class="summary-item"><strong>${vendorAlerts.length}</strong> alertes de proveidor</div>
+                </div>`;
+
+                // Global alerts section
+                if (globalAlerts.length > 0) {
+                    html += '<div class="global-alerts"><h3>Alertes Globals (Sistema)</h3>';
+                    html += globalAlerts.map(a => `
+                        <div class="alert ${a.type}">
+                            <h4>${a.title}</h4>
+                            <p>${a.description}</p>
+                        </div>
+                    `).join('');
+                    html += '</div>';
+                }
+
+                // Vendor-grouped alerts section
+                if (sortedVendors.length > 0) {
+                    html += '<div class="vendor-alerts-section"><h3>Alertes per Proveidor (' + sortedVendors.length + ')</h3>';
+
+                    sortedVendors.forEach((group, index) => {
+                        const headerClass = group.alertCount > 0 ? 'has-critical' :
+                                          group.warningCount > 0 ? 'has-warning' : 'has-info';
+
+                        html += `
+                        <div class="vendor-alert-group" id="vendor-group-${index}">
+                            <div class="vendor-alert-header ${headerClass}" onclick="document.getElementById('vendor-group-${index}').classList.toggle('expanded')">
+                                <div class="vendor-info">
+                                    <h4>${group.company || 'Empresa desconeguda'}</h4>
+                                    <span class="nif">${group.nif || 'NIF no disponible'}</span>
+                                </div>
+                                <div class="vendor-badges">
+                                    ${group.alertCount > 0 ? `<span class="badge alert-count">${group.alertCount} crit.</span>` : ''}
+                                    ${group.warningCount > 0 ? `<span class="badge warning-count">${group.warningCount} avis</span>` : ''}
+                                    ${group.infoCount > 0 ? `<span class="badge info-count">${group.infoCount} info</span>` : ''}
+                                    <span class="toggle-icon">▼</span>
+                                </div>
+                            </div>
+                            <div class="vendor-alert-details">
+                                ${group.alerts.map(a => `
+                                    <div class="vendor-alert-item ${a.type}-type">
+                                        <strong>${a.title}</strong>
+                                        <p>${a.description}</p>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>`;
+                    });
+
+                    html += '</div>';
+                }
+
+                alertsContainer.innerHTML = html;
             }
 
             // Render top companies
