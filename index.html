@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auditoria Contractes Sabadell</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f7fa;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, #1a5f7a, #2d8a6e);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+
+        header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            opacity: 0.9;
+        }
+
+        .data-source {
+            background: #e8f4f8;
+            border-left: 4px solid #1a5f7a;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .data-source a {
+            color: #1a5f7a;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .data-source a:hover {
+            text-decoration: underline;
+        }
+
+        .upload-section {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            text-align: center;
+        }
+
+        .upload-section h2 {
+            margin-bottom: 20px;
+            color: #1a5f7a;
+        }
+
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 12px;
+            padding: 40px;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #fafafa;
+        }
+
+        .upload-area:hover {
+            border-color: #1a5f7a;
+            background: #f0f7fa;
+        }
+
+        .upload-area.dragover {
+            border-color: #2d8a6e;
+            background: #e8f5e9;
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        .btn {
+            background: #1a5f7a;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background 0.3s;
+            margin: 5px;
+        }
+
+        .btn:hover {
+            background: #134a5f;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .stat-card h3 {
+            color: #666;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        .stat-card .value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #1a5f7a;
+        }
+
+        .alerts-section {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .alerts-section h2 {
+            color: #c0392b;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .alert {
+            background: #fdf2f2;
+            border-left: 4px solid #c0392b;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .alert.warning {
+            background: #fef9e7;
+            border-left-color: #f39c12;
+        }
+
+        .alert.info {
+            background: #e8f4f8;
+            border-left-color: #3498db;
+        }
+
+        .alert h4 {
+            margin-bottom: 5px;
+        }
+
+        .alert p {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .filters {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .filters input, .filters select {
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+
+        .filters input:focus, .filters select:focus {
+            outline: none;
+            border-color: #1a5f7a;
+        }
+
+        .table-container {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            margin-bottom: 30px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: #1a5f7a;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        th:hover {
+            background: #134a5f;
+        }
+
+        td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        tr:hover {
+            background: #f5f7fa;
+        }
+
+        .amount {
+            font-weight: bold;
+            color: #1a5f7a;
+        }
+
+        .company-analysis {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .company-analysis h2 {
+            margin-bottom: 20px;
+            color: #1a5f7a;
+        }
+
+        .company-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .company-row:last-child {
+            border-bottom: none;
+        }
+
+        .company-name {
+            font-weight: 500;
+        }
+
+        .company-stats {
+            display: flex;
+            gap: 20px;
+            color: #666;
+        }
+
+        .highlight {
+            background: #fff3cd;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .threshold-highlight {
+            background: #ffeaa7;
+        }
+
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        footer a {
+            color: #1a5f7a;
+        }
+
+        .instructions {
+            background: #fff;
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        .instructions h2 {
+            color: #1a5f7a;
+            margin-bottom: 15px;
+        }
+
+        .instructions ol {
+            margin-left: 20px;
+        }
+
+        .instructions li {
+            margin-bottom: 10px;
+        }
+
+        .instructions code {
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Auditoria de Contractes Publics - Sabadell</h1>
+            <p>Eina per analitzar els contractes publics de l'Ajuntament de Sabadell i detectar possibles irregularitats</p>
+        </header>
+
+        <div class="data-source">
+            <strong>Font de dades:</strong> Les dades provenen del
+            <a href="https://dadesobertes.seu-e.cat/dataset/css-rc-contractes-pscp" target="_blank">Portal de Dades Obertes del Consorci AOC</a>
+            i del <a href="https://contractacio.ajsabadell.cat/" target="_blank">Portal de Licitacio de l'Ajuntament de Sabadell</a>.
+        </div>
+
+        <div class="instructions">
+            <h2>Com utilitzar aquesta eina</h2>
+            <ol>
+                <li><strong>Descarrega les dades:</strong> Ves a <a href="https://dadesobertes.seu-e.cat/csv/css-rc-contractes-pscp-socrata.csv" target="_blank">aquest enllac</a> per descarregar el fitxer CSV amb tots els contractes (pot trigar una mica, es un fitxer gran).</li>
+                <li><strong>Carrega el fitxer:</strong> Arrossega el fitxer CSV a l'area de sota o fes clic per seleccionar-lo.</li>
+                <li><strong>Filtra per Sabadell:</strong> Un cop carregat, utilitza el filtre "Organisme" per seleccionar "Ajuntament de Sabadell" o altres ens municipals.</li>
+                <li><strong>Analitza les alertes:</strong> Revisa la seccio d'alertes per veure possibles irregularitats detectades automaticament.</li>
+            </ol>
+        </div>
+
+        <div class="upload-section" id="upload-section">
+            <h2>Carrega el fitxer de contractes</h2>
+            <div class="upload-area" id="upload-area">
+                <p>Arrossega el fitxer CSV aqui o fes clic per seleccionar-lo</p>
+                <input type="file" id="file-input" accept=".csv">
+            </div>
+            <p style="margin-top: 15px; color: #666; font-size: 0.9em;">Format acceptat: CSV</p>
+        </div>
+
+        <div id="results" class="hidden">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Total Contractes</h3>
+                    <div class="value" id="total-contracts">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Import Total</h3>
+                    <div class="value" id="total-amount">0 EUR</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Empreses Diferents</h3>
+                    <div class="value" id="unique-companies">0</div>
+                </div>
+                <div class="stat-card">
+                    <h3>Alertes Detectades</h3>
+                    <div class="value" id="alerts-count">0</div>
+                </div>
+            </div>
+
+            <div class="alerts-section" id="alerts-section">
+                <h2>Alertes i Indicadors de Risc</h2>
+                <div id="alerts-container">
+                    <p class="loading">Analitzant dades...</p>
+                </div>
+            </div>
+
+            <div class="company-analysis">
+                <h2>Empreses amb mes contractes</h2>
+                <div id="top-companies"></div>
+            </div>
+
+            <div class="filters">
+                <input type="text" id="search" placeholder="Cercar per text...">
+                <select id="filter-org">
+                    <option value="">Tots els organismes</option>
+                </select>
+                <select id="filter-type">
+                    <option value="">Tots els tipus</option>
+                </select>
+                <select id="filter-year">
+                    <option value="">Tots els anys</option>
+                </select>
+                <button class="btn btn-secondary" onclick="resetFilters()">Netejar filtres</button>
+                <button class="btn" onclick="exportFiltered()">Exportar filtrat (CSV)</button>
+            </div>
+
+            <div class="table-container">
+                <table id="contracts-table">
+                    <thead>
+                        <tr>
+                            <th onclick="sortTable('org')">Organisme</th>
+                            <th onclick="sortTable('object')">Objecte</th>
+                            <th onclick="sortTable('company')">Adjudicatari</th>
+                            <th onclick="sortTable('amount')">Import</th>
+                            <th onclick="sortTable('date')">Data</th>
+                            <th onclick="sortTable('type')">Tipus</th>
+                        </tr>
+                    </thead>
+                    <tbody id="contracts-body">
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="pagination" style="text-align: center; margin: 20px 0;">
+                <button class="btn btn-secondary" onclick="prevPage()">Anterior</button>
+                <span id="page-info" style="margin: 0 20px;"></span>
+                <button class="btn btn-secondary" onclick="nextPage()">Seguent</button>
+            </div>
+        </div>
+
+        <footer>
+            <p>Eina creada per promoure la transparencia i la participacio ciutadana.</p>
+            <p>Dades obertes de <a href="https://dadesobertes.seu-e.cat/" target="_blank">Consorci AOC</a> |
+               <a href="https://web.sabadell.cat/transparencia" target="_blank">Portal de Transparencia de Sabadell</a></p>
+        </footer>
+    </div>
+
+    <script>
+        let allContracts = [];
+        let filteredContracts = [];
+        let currentPage = 1;
+        const itemsPerPage = 50;
+        let sortColumn = 'date';
+        let sortDirection = 'desc';
+
+        // Thresholds for contract types (simplified - actual thresholds vary)
+        const THRESHOLDS = {
+            minor: 15000,      // Contractes menors serveis/subministraments
+            minorWorks: 40000, // Contractes menors obres
+            negotiated: 60000  // Procediment negociat
+        };
+
+        // Upload handling
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) processFile(file);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) processFile(file);
+        });
+
+        function processFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const text = e.target.result;
+                parseCSV(text);
+            };
+            reader.readAsText(file, 'UTF-8');
+        }
+
+        function parseCSV(text) {
+            const lines = text.split('\n');
+            const headers = parseCSVLine(lines[0]);
+
+            allContracts = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                if (!lines[i].trim()) continue;
+
+                const values = parseCSVLine(lines[i]);
+                const contract = {};
+
+                headers.forEach((header, index) => {
+                    contract[header.trim().toLowerCase()] = values[index] || '';
+                });
+
+                // Normalize field names (the CSV might have different column names)
+                contract.normalized = {
+                    org: findField(contract, ['ens', 'organisme', 'entitat', 'organ_contractacio', 'nom_organ']),
+                    object: findField(contract, ['objecte', 'descripcio', 'titol', 'nom_contracte']),
+                    company: findField(contract, ['adjudicatari', 'empresa', 'raó_social', 'nom_empresa', 'rao_social']),
+                    nif: findField(contract, ['nif', 'cif', 'nif_adjudicatari']),
+                    amount: parseAmount(findField(contract, ['import', 'preu', 'valor', 'import_adjudicacio', 'import_licitacio'])),
+                    date: findField(contract, ['data', 'data_adjudicacio', 'data_publicacio', 'data_formalitzacio']),
+                    type: findField(contract, ['tipus', 'procediment', 'tipus_contracte', 'tipus_procediment'])
+                };
+
+                allContracts.push(contract);
+            }
+
+            // Filter for Sabadell if possible
+            const sabadellContracts = allContracts.filter(c =>
+                c.normalized.org.toLowerCase().includes('sabadell')
+            );
+
+            if (sabadellContracts.length > 0) {
+                filteredContracts = sabadellContracts;
+            } else {
+                filteredContracts = allContracts;
+            }
+
+            document.getElementById('upload-section').classList.add('hidden');
+            document.getElementById('results').classList.remove('hidden');
+
+            populateFilters();
+            analyzeData();
+            renderTable();
+        }
+
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if ((char === ',' || char === ';') && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current.trim());
+
+            return result;
+        }
+
+        function findField(contract, possibleNames) {
+            for (const name of possibleNames) {
+                for (const key in contract) {
+                    if (key.includes(name) || name.includes(key)) {
+                        return contract[key];
+                    }
+                }
+            }
+            return '';
+        }
+
+        function parseAmount(value) {
+            if (!value) return 0;
+            // Remove currency symbols, spaces, and handle European number format
+            const cleaned = value.toString()
+                .replace(/[^0-9,.\-]/g, '')
+                .replace(/\.(?=.*,)/g, '')  // Remove thousand separators
+                .replace(',', '.');          // Convert decimal comma to point
+            return parseFloat(cleaned) || 0;
+        }
+
+        function formatAmount(amount) {
+            return new Intl.NumberFormat('ca-ES', {
+                style: 'currency',
+                currency: 'EUR'
+            }).format(amount);
+        }
+
+        function populateFilters() {
+            const orgs = [...new Set(allContracts.map(c => c.normalized.org).filter(Boolean))].sort();
+            const types = [...new Set(allContracts.map(c => c.normalized.type).filter(Boolean))].sort();
+            const years = [...new Set(allContracts.map(c => {
+                const date = c.normalized.date;
+                const match = date.match(/\d{4}/);
+                return match ? match[0] : null;
+            }).filter(Boolean))].sort().reverse();
+
+            const orgSelect = document.getElementById('filter-org');
+            orgs.forEach(org => {
+                const option = document.createElement('option');
+                option.value = org;
+                option.textContent = org.length > 50 ? org.substring(0, 50) + '...' : org;
+                orgSelect.appendChild(option);
+            });
+
+            const typeSelect = document.getElementById('filter-type');
+            types.forEach(type => {
+                const option = document.createElement('option');
+                option.value = type;
+                option.textContent = type;
+                typeSelect.appendChild(option);
+            });
+
+            const yearSelect = document.getElementById('filter-year');
+            years.forEach(year => {
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = year;
+                yearSelect.appendChild(option);
+            });
+
+            // Add filter event listeners
+            document.getElementById('search').addEventListener('input', applyFilters);
+            document.getElementById('filter-org').addEventListener('change', applyFilters);
+            document.getElementById('filter-type').addEventListener('change', applyFilters);
+            document.getElementById('filter-year').addEventListener('change', applyFilters);
+        }
+
+        function applyFilters() {
+            const search = document.getElementById('search').value.toLowerCase();
+            const org = document.getElementById('filter-org').value;
+            const type = document.getElementById('filter-type').value;
+            const year = document.getElementById('filter-year').value;
+
+            filteredContracts = allContracts.filter(c => {
+                const matchSearch = !search ||
+                    c.normalized.object.toLowerCase().includes(search) ||
+                    c.normalized.company.toLowerCase().includes(search) ||
+                    c.normalized.org.toLowerCase().includes(search);
+
+                const matchOrg = !org || c.normalized.org === org;
+                const matchType = !type || c.normalized.type === type;
+                const matchYear = !year || c.normalized.date.includes(year);
+
+                return matchSearch && matchOrg && matchType && matchYear;
+            });
+
+            currentPage = 1;
+            analyzeData();
+            renderTable();
+        }
+
+        function resetFilters() {
+            document.getElementById('search').value = '';
+            document.getElementById('filter-org').value = '';
+            document.getElementById('filter-type').value = '';
+            document.getElementById('filter-year').value = '';
+            filteredContracts = allContracts;
+            currentPage = 1;
+            analyzeData();
+            renderTable();
+        }
+
+        function analyzeData() {
+            // Basic stats
+            const totalContracts = filteredContracts.length;
+            const totalAmount = filteredContracts.reduce((sum, c) => sum + c.normalized.amount, 0);
+            const uniqueCompanies = new Set(filteredContracts.map(c => c.normalized.company).filter(Boolean)).size;
+
+            document.getElementById('total-contracts').textContent = totalContracts.toLocaleString('ca-ES');
+            document.getElementById('total-amount').textContent = formatAmount(totalAmount);
+            document.getElementById('unique-companies').textContent = uniqueCompanies.toLocaleString('ca-ES');
+
+            // Analyze for potential issues
+            const alerts = [];
+
+            // 1. Companies with many contracts
+            const companyContracts = {};
+            const companyAmounts = {};
+            filteredContracts.forEach(c => {
+                const company = c.normalized.company;
+                if (company) {
+                    companyContracts[company] = (companyContracts[company] || 0) + 1;
+                    companyAmounts[company] = (companyAmounts[company] || 0) + c.normalized.amount;
+                }
+            });
+
+            const topCompanies = Object.entries(companyContracts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+
+            // Alert for companies with disproportionate contracts
+            topCompanies.forEach(([company, count]) => {
+                const percentage = (count / totalContracts * 100).toFixed(1);
+                if (percentage > 5 && count > 10) {
+                    alerts.push({
+                        type: 'warning',
+                        title: `Concentracio de contractes: ${company}`,
+                        description: `Aquesta empresa te ${count} contractes (${percentage}% del total), amb un import total de ${formatAmount(companyAmounts[company])}.`
+                    });
+                }
+            });
+
+            // 2. Contracts just under thresholds
+            const nearThreshold = filteredContracts.filter(c => {
+                const amount = c.normalized.amount;
+                return (amount >= THRESHOLDS.minor * 0.9 && amount < THRESHOLDS.minor) ||
+                       (amount >= THRESHOLDS.minorWorks * 0.9 && amount < THRESHOLDS.minorWorks);
+            });
+
+            if (nearThreshold.length > 5) {
+                alerts.push({
+                    type: 'alert',
+                    title: `${nearThreshold.length} contractes just per sota dels llindars legals`,
+                    description: `S'han detectat contractes amb imports entre el 90% i 100% dels llindars (15.000EUR o 40.000EUR). Aixo podria indicar fraccionament de contractes per evitar procediments mes rigorosos.`
+                });
+            }
+
+            // 3. Same company winning contracts on same/consecutive days
+            const companyDates = {};
+            filteredContracts.forEach(c => {
+                const key = c.normalized.company;
+                if (key) {
+                    if (!companyDates[key]) companyDates[key] = [];
+                    companyDates[key].push(c.normalized.date);
+                }
+            });
+
+            Object.entries(companyDates).forEach(([company, dates]) => {
+                const sameDayCount = dates.length - new Set(dates).size;
+                if (sameDayCount > 3) {
+                    alerts.push({
+                        type: 'info',
+                        title: `Multiples contractes el mateix dia: ${company}`,
+                        description: `Aquesta empresa ha rebut multiples contractes en les mateixes dates. Pot ser normal pero mereix revisio.`
+                    });
+                }
+            });
+
+            // 4. Contracts without proper company identification
+            const noNIF = filteredContracts.filter(c => !c.normalized.nif && c.normalized.amount > 5000);
+            if (noNIF.length > 10) {
+                alerts.push({
+                    type: 'warning',
+                    title: `${noNIF.length} contractes sense NIF/CIF de l'adjudicatari`,
+                    description: `Alguns contractes no tenen identificacio fiscal de l'empresa adjudicataria.`
+                });
+            }
+
+            // Render alerts
+            const alertsContainer = document.getElementById('alerts-container');
+            document.getElementById('alerts-count').textContent = alerts.length;
+
+            if (alerts.length === 0) {
+                alertsContainer.innerHTML = '<p class="alert info"><strong>Cap alerta detectada.</strong> Les dades no mostren patrons sospitosos evidents. Aixo no garanteix l\'absencia d\'irregularitats.</p>';
+            } else {
+                alertsContainer.innerHTML = alerts.map(a => `
+                    <div class="alert ${a.type}">
+                        <h4>${a.title}</h4>
+                        <p>${a.description}</p>
+                    </div>
+                `).join('');
+            }
+
+            // Render top companies
+            const topCompaniesContainer = document.getElementById('top-companies');
+            topCompaniesContainer.innerHTML = topCompanies.map(([company, count]) => `
+                <div class="company-row">
+                    <span class="company-name">${company || 'No identificat'}</span>
+                    <span class="company-stats">
+                        <span><strong>${count}</strong> contractes</span>
+                        <span><strong>${formatAmount(companyAmounts[company] || 0)}</strong></span>
+                    </span>
+                </div>
+            `).join('');
+        }
+
+        function renderTable() {
+            // Sort
+            const sorted = [...filteredContracts].sort((a, b) => {
+                let aVal = a.normalized[sortColumn];
+                let bVal = b.normalized[sortColumn];
+
+                if (sortColumn === 'amount') {
+                    aVal = parseFloat(aVal) || 0;
+                    bVal = parseFloat(bVal) || 0;
+                } else {
+                    aVal = (aVal || '').toString().toLowerCase();
+                    bVal = (bVal || '').toString().toLowerCase();
+                }
+
+                if (sortDirection === 'asc') {
+                    return aVal > bVal ? 1 : -1;
+                } else {
+                    return aVal < bVal ? 1 : -1;
+                }
+            });
+
+            // Paginate
+            const start = (currentPage - 1) * itemsPerPage;
+            const pageData = sorted.slice(start, start + itemsPerPage);
+            const totalPages = Math.ceil(sorted.length / itemsPerPage);
+
+            // Render
+            const tbody = document.getElementById('contracts-body');
+            tbody.innerHTML = pageData.map(c => {
+                const isNearThreshold = (c.normalized.amount >= THRESHOLDS.minor * 0.9 && c.normalized.amount < THRESHOLDS.minor) ||
+                                       (c.normalized.amount >= THRESHOLDS.minorWorks * 0.9 && c.normalized.amount < THRESHOLDS.minorWorks);
+                return `
+                    <tr class="${isNearThreshold ? 'threshold-highlight' : ''}">
+                        <td>${c.normalized.org}</td>
+                        <td>${c.normalized.object}</td>
+                        <td>${c.normalized.company}</td>
+                        <td class="amount">${formatAmount(c.normalized.amount)}</td>
+                        <td>${c.normalized.date}</td>
+                        <td>${c.normalized.type}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            document.getElementById('page-info').textContent = `Pagina ${currentPage} de ${totalPages} (${sorted.length} resultats)`;
+        }
+
+        function sortTable(column) {
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                sortDirection = 'asc';
+            }
+            renderTable();
+        }
+
+        function prevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                renderTable();
+            }
+        }
+
+        function nextPage() {
+            const totalPages = Math.ceil(filteredContracts.length / itemsPerPage);
+            if (currentPage < totalPages) {
+                currentPage++;
+                renderTable();
+            }
+        }
+
+        function exportFiltered() {
+            const headers = ['Organisme', 'Objecte', 'Adjudicatari', 'Import', 'Data', 'Tipus'];
+            const rows = filteredContracts.map(c => [
+                c.normalized.org,
+                c.normalized.object,
+                c.normalized.company,
+                c.normalized.amount,
+                c.normalized.date,
+                c.normalized.type
+            ]);
+
+            let csv = headers.join(';') + '\n';
+            rows.forEach(row => {
+                csv += row.map(cell => `"${(cell || '').toString().replace(/"/g, '""')}"`).join(';') + '\n';
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'contractes_filtrats.csv';
+            link.click();
+        }
+    </script>
+</body>
+</html>
