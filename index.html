@@ -787,6 +787,50 @@
             return false;
         }
 
+        // String similarity function (similar to Python's difflib.SequenceMatcher)
+        // Returns a ratio between 0 and 1 (1 = identical)
+        function stringSimilarity(str1, str2) {
+            if (!str1 || !str2) return 0;
+
+            // Normalize strings: lowercase, remove extra spaces and punctuation
+            const normalize = (s) => s.toLowerCase()
+                .replace(/[^\w\s]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            const s1 = normalize(str1);
+            const s2 = normalize(str2);
+
+            if (s1 === s2) return 1;
+            if (s1.length === 0 || s2.length === 0) return 0;
+
+            // Use Longest Common Subsequence approach for similarity
+            const longer = s1.length > s2.length ? s1 : s2;
+            const shorter = s1.length > s2.length ? s2 : s1;
+
+            // Simple approach: count matching words
+            const words1 = new Set(s1.split(' ').filter(w => w.length > 2));
+            const words2 = new Set(s2.split(' ').filter(w => w.length > 2));
+
+            if (words1.size === 0 || words2.size === 0) return 0;
+
+            let matches = 0;
+            words1.forEach(w => {
+                if (words2.has(w)) matches++;
+            });
+
+            // Jaccard-like similarity
+            const union = new Set([...words1, ...words2]).size;
+            return matches / union;
+        }
+
+        // Get CPV root (first 3 digits = division level)
+        function getCpvRoot(cpv) {
+            if (!cpv) return null;
+            const match = cpv.toString().match(/^(\d{3})/);
+            return match ? match[1] : null;
+        }
+
         function updateDebugPanel(columnMap) {
             const fieldLabels = {
                 org: 'Organisme',
@@ -970,69 +1014,193 @@
             });
 
             // ============================================================
-            // DETECTION INDICATORS (based on anti-corruption best practices)
+            // INTELLIGENT CONTRACT SPLITTING DETECTION
+            // Three linkage checks based on anti-corruption best practices
             // ============================================================
 
             // Helper: extract fiscal year from date
             function getFiscalYear(dateStr) {
+                if (!dateStr) return null;
                 const match = dateStr.match(/\d{4}/);
                 return match ? match[0] : null;
             }
 
-            // Helper: extract CPV prefix (first 2-4 digits = sector)
-            function getCpvSector(cpv) {
-                if (!cpv) return null;
-                const match = cpv.toString().match(/^(\d{2,4})/);
-                return match ? match[1] : null;
-            }
-
             // ----------------------------------------------------------
-            // 1. CONTRACT SPLITTING (Fraccionament de Contractes)
-            // Group by: NIF + CPV sector + Fiscal Year
+            // 1A. CPV ROOT LOGIC
+            // Group by: NIF + CPV root (first 3 digits) + Fiscal Year
             // Flag if combined value exceeds threshold
             // ----------------------------------------------------------
-            const splittingGroups = {};
+            const cpvGroups = {};
             filteredContracts.forEach(c => {
                 const nif = c.normalized.nif;
-                const cpvSector = getCpvSector(c.normalized.cpv) || 'unknown';
-                const year = getFiscalYear(c.normalized.date) || 'unknown';
+                const cpvRoot = getCpvRoot(c.normalized.cpv);
+                const year = getFiscalYear(c.normalized.date);
 
-                if (nif && c.normalized.amount > 0 && c.normalized.amount < THRESHOLDS.minorWorks) {
-                    const key = `${nif}|||${cpvSector}|||${year}`;
-                    if (!splittingGroups[key]) {
-                        splittingGroups[key] = {
+                if (nif && cpvRoot && year && c.normalized.amount > 0 && c.normalized.amount < THRESHOLDS.minorWorks) {
+                    const key = `${nif}|||${cpvRoot}|||${year}`;
+                    if (!cpvGroups[key]) {
+                        cpvGroups[key] = {
                             nif: nif,
                             company: c.normalized.company,
-                            cpvSector: cpvSector,
+                            cpvRoot: cpvRoot,
                             year: year,
                             contracts: [],
                             totalAmount: 0
                         };
                     }
-                    splittingGroups[key].contracts.push(c);
-                    splittingGroups[key].totalAmount += c.normalized.amount;
+                    cpvGroups[key].contracts.push(c);
+                    cpvGroups[key].totalAmount += c.normalized.amount;
                 }
             });
 
-            Object.values(splittingGroups).forEach(group => {
+            Object.values(cpvGroups).forEach(group => {
                 if (group.contracts.length < 2) return;
 
                 const allUnderMinor = group.contracts.every(c => c.normalized.amount < THRESHOLDS.minor);
                 const allUnderWorks = group.contracts.every(c => c.normalized.amount < THRESHOLDS.minorWorks);
 
-                // Flag if all contracts under threshold but combined exceeds it
                 if (allUnderMinor && group.totalAmount >= THRESHOLDS.minor) {
                     alerts.push({
                         type: 'alert',
-                        title: `Possible fraccionament: ${group.company || group.nif}`,
-                        description: `${group.contracts.length} contractes menors al mateix proveidor (NIF: ${group.nif}) en el sector CPV ${group.cpvSector} durant ${group.year}, amb un total de ${formatAmount(group.totalAmount)} (supera el llindar de 15.000€).`
+                        title: `Fraccionament CPV: ${group.company || group.nif}`,
+                        description: `${group.contracts.length} contractes menors al mateix proveidor (NIF: ${group.nif}) en el sector CPV ${group.cpvRoot}xxx durant ${group.year}. Total: ${formatAmount(group.totalAmount)} (supera 15.000€).`
                     });
                 } else if (allUnderWorks && group.totalAmount >= THRESHOLDS.minorWorks) {
                     alerts.push({
                         type: 'alert',
-                        title: `Possible fraccionament (obres): ${group.company || group.nif}`,
-                        description: `${group.contracts.length} contractes menors al mateix proveidor (NIF: ${group.nif}) en el sector CPV ${group.cpvSector} durant ${group.year}, amb un total de ${formatAmount(group.totalAmount)} (supera el llindar de 40.000€).`
+                        title: `Fraccionament CPV (obres): ${group.company || group.nif}`,
+                        description: `${group.contracts.length} contractes menors al mateix proveidor (NIF: ${group.nif}) en el sector CPV ${group.cpvRoot}xxx durant ${group.year}. Total: ${formatAmount(group.totalAmount)} (supera 40.000€).`
                     });
+                }
+            });
+
+            // ----------------------------------------------------------
+            // 1B. SEMANTIC SIMILARITY CHECK
+            // Compare objecte_contracte fields for >80% similarity
+            // Flag if similar descriptions and combined exceeds threshold
+            // ----------------------------------------------------------
+            const vendorYearContracts = {};
+            filteredContracts.forEach(c => {
+                const nif = c.normalized.nif;
+                const year = getFiscalYear(c.normalized.date);
+                if (nif && year && c.normalized.object && c.normalized.amount > 0) {
+                    const key = `${nif}|||${year}`;
+                    if (!vendorYearContracts[key]) {
+                        vendorYearContracts[key] = {
+                            nif: nif,
+                            company: c.normalized.company,
+                            year: year,
+                            contracts: []
+                        };
+                    }
+                    vendorYearContracts[key].contracts.push(c);
+                }
+            });
+
+            // Check for semantic similarity within each vendor-year group
+            const alreadyFlaggedSemantic = new Set();
+            Object.values(vendorYearContracts).forEach(group => {
+                if (group.contracts.length < 2) return;
+
+                // Compare pairs of contracts for similarity
+                for (let i = 0; i < group.contracts.length; i++) {
+                    for (let j = i + 1; j < group.contracts.length; j++) {
+                        const c1 = group.contracts[i];
+                        const c2 = group.contracts[j];
+
+                        const similarity = stringSimilarity(c1.normalized.object, c2.normalized.object);
+
+                        if (similarity >= 0.8) {
+                            const combinedAmount = c1.normalized.amount + c2.normalized.amount;
+                            const bothUnderMinor = c1.normalized.amount < THRESHOLDS.minor && c2.normalized.amount < THRESHOLDS.minor;
+                            const bothUnderWorks = c1.normalized.amount < THRESHOLDS.minorWorks && c2.normalized.amount < THRESHOLDS.minorWorks;
+
+                            const alertKey = `${group.nif}|||${group.year}|||semantic`;
+                            if (!alreadyFlaggedSemantic.has(alertKey)) {
+                                if (bothUnderMinor && combinedAmount >= THRESHOLDS.minor) {
+                                    alreadyFlaggedSemantic.add(alertKey);
+                                    alerts.push({
+                                        type: 'alert',
+                                        title: `Fraccionament semantic: ${group.company || group.nif}`,
+                                        description: `Contractes amb descripcions similars (${(similarity * 100).toFixed(0)}% similitud) al mateix proveidor durant ${group.year}. Exemple: "${c1.normalized.object.substring(0, 50)}..." Total combinat: ${formatAmount(combinedAmount)} (supera 15.000€).`
+                                    });
+                                } else if (bothUnderWorks && combinedAmount >= THRESHOLDS.minorWorks) {
+                                    alreadyFlaggedSemantic.add(alertKey);
+                                    alerts.push({
+                                        type: 'alert',
+                                        title: `Fraccionament semantic (obres): ${group.company || group.nif}`,
+                                        description: `Contractes amb descripcions similars (${(similarity * 100).toFixed(0)}% similitud) al mateix proveidor durant ${group.year}. Total combinat: ${formatAmount(combinedAmount)} (supera 40.000€).`
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // ----------------------------------------------------------
+            // 1C. TEMPORAL BURST CHECK
+            // Flag: >2 contracts to same vendor within 30-day rolling window
+            // Mark as "High Velocity / Urgency Risk"
+            // ----------------------------------------------------------
+            const vendorContracts = {};
+            filteredContracts.forEach(c => {
+                const nif = c.normalized.nif;
+                if (nif && c.normalized.date) {
+                    if (!vendorContracts[nif]) {
+                        vendorContracts[nif] = {
+                            nif: nif,
+                            company: c.normalized.company,
+                            contracts: []
+                        };
+                    }
+                    vendorContracts[nif].contracts.push({
+                        date: parseDate(c.normalized.date),
+                        dateStr: c.normalized.date,
+                        amount: c.normalized.amount,
+                        object: c.normalized.object
+                    });
+                }
+            });
+
+            const alreadyFlaggedBurst = new Set();
+            Object.values(vendorContracts).forEach(group => {
+                if (group.contracts.length < 3) return;
+
+                // Sort by date
+                const sorted = group.contracts
+                    .filter(c => c.date)
+                    .sort((a, b) => a.date - b.date);
+
+                // Sliding window check
+                for (let i = 0; i < sorted.length - 2; i++) {
+                    const windowStart = sorted[i].date;
+                    let windowContracts = [sorted[i]];
+
+                    for (let j = i + 1; j < sorted.length; j++) {
+                        const daysDiff = (sorted[j].date - windowStart) / (1000 * 60 * 60 * 24);
+                        if (daysDiff <= 30) {
+                            windowContracts.push(sorted[j]);
+                        } else {
+                            break;
+                        }
+                    }
+
+                    // Flag if >2 contracts in 30-day window
+                    if (windowContracts.length > 2) {
+                        const alertKey = `${group.nif}|||${windowContracts[0].dateStr}`;
+                        if (!alreadyFlaggedBurst.has(alertKey)) {
+                            alreadyFlaggedBurst.add(alertKey);
+                            const totalAmount = windowContracts.reduce((sum, c) => sum + c.amount, 0);
+                            alerts.push({
+                                type: 'warning',
+                                title: `Alta velocitat: ${group.company || group.nif}`,
+                                description: `${windowContracts.length} contractes al mateix proveidor en 30 dies (${windowContracts[0].dateStr} - ${windowContracts[windowContracts.length - 1].dateStr}). Total: ${formatAmount(totalAmount)}. Risc d'urgencia o fraccionament.`
+                            });
+                        }
+                        // Skip ahead to avoid duplicate alerts
+                        i += windowContracts.length - 2;
+                    }
                 }
             });
 
