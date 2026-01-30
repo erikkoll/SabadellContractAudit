@@ -560,7 +560,7 @@
                 'identificador_adjudicatari'
             ],
             amount: [
-                'import_adjudicacio_amb_iva', 'import_adjudicacio_sense_iva',
+                'import_adjudicacio_sense_iva', 'import_adjudicacio_amb_iva',
                 'import_adjudicacio', 'import adjudicacio', 'import_licitacio',
                 'preu_adjudicacio', 'valor_estimat', 'import', 'preu', 'valor'
             ],
@@ -570,8 +570,35 @@
                 'data_formalitzacio_contracte', 'data_publicacio', 'data_inici', 'data'
             ],
             type: [
-                'tipus_contracte', 'tipus contracte', 'procediment_adjudicacio',
-                'procediment', 'tipus_procediment', 'tipus'
+                'tipus_contracte', 'tipus contracte', 'tipus'
+            ],
+            // New fields for advanced detection
+            procedure: [
+                'procediment_adjudicacio', 'procediment', 'tipus_procediment'
+            ],
+            cpv: [
+                'codi_cpv', 'cpv', 'codi_cpv_principal'
+            ],
+            budget: [
+                'pressupost_licitacio_sense_iva', 'pressupost_licitacio',
+                'valor_estimat_contracte', 'valor_estimat'
+            ],
+            bidsReceived: [
+                'ofertes_rebudes', 'nombre_ofertes', 'num_ofertes', 'licitadors'
+            ],
+            publicationDate: [
+                'data_publicacio_anunci', 'data_publicacio', 'data_anunci'
+            ],
+            offerDeadline: [
+                'termini_presentacio_ofertes', 'data_limit_presentacio',
+                'data_fi_presentacio', 'termini_ofertes'
+            ],
+            department: [
+                'nom_departament_ens', 'departament', 'unitat_tramitadora',
+                'area', 'servei'
+            ],
+            expedient: [
+                'codi_expedient', 'numero_expedient', 'expedient', 'referencia'
             ]
         };
 
@@ -658,7 +685,16 @@
                     nif: columnMap.nif ? (contract.raw[columnMap.nif] || '') : '',
                     amount: parseAmount(columnMap.amount ? (contract.raw[columnMap.amount] || '') : ''),
                     date: columnMap.date ? (contract.raw[columnMap.date] || '') : '',
-                    type: columnMap.type ? (contract.raw[columnMap.type] || '') : ''
+                    type: columnMap.type ? (contract.raw[columnMap.type] || '') : '',
+                    // New fields for advanced detection
+                    procedure: columnMap.procedure ? (contract.raw[columnMap.procedure] || '') : '',
+                    cpv: columnMap.cpv ? (contract.raw[columnMap.cpv] || '') : '',
+                    budget: parseAmount(columnMap.budget ? (contract.raw[columnMap.budget] || '') : ''),
+                    bidsReceived: parseInt(columnMap.bidsReceived ? (contract.raw[columnMap.bidsReceived] || '') : '') || 0,
+                    publicationDate: columnMap.publicationDate ? (contract.raw[columnMap.publicationDate] || '') : '',
+                    offerDeadline: columnMap.offerDeadline ? (contract.raw[columnMap.offerDeadline] || '') : '',
+                    department: columnMap.department ? (contract.raw[columnMap.department] || '') : '',
+                    expedient: columnMap.expedient ? (contract.raw[columnMap.expedient] || '') : ''
                 };
 
                 allContracts.push(contract);
@@ -759,7 +795,15 @@
                 nif: 'NIF',
                 amount: 'Import',
                 date: 'Data',
-                type: 'Tipus'
+                type: 'Tipus',
+                procedure: 'Procediment',
+                cpv: 'CPV',
+                budget: 'Pressupost',
+                bidsReceived: 'Ofertes rebudes',
+                publicationDate: 'Data publicacio',
+                offerDeadline: 'Termini ofertes',
+                department: 'Departament',
+                expedient: 'Expedient'
             };
 
             const mappingsHtml = Object.entries(columnMap).map(([field, column]) => `
@@ -925,106 +969,213 @@
                 }
             });
 
-            // 2. Contracts just under thresholds
-            const nearThreshold = filteredContracts.filter(c => {
-                const amount = c.normalized.amount;
-                return (amount >= THRESHOLDS.minor * 0.9 && amount < THRESHOLDS.minor) ||
-                       (amount >= THRESHOLDS.minorWorks * 0.9 && amount < THRESHOLDS.minorWorks);
-            });
+            // ============================================================
+            // DETECTION INDICATORS (based on anti-corruption best practices)
+            // ============================================================
 
-            if (nearThreshold.length > 5) {
-                alerts.push({
-                    type: 'alert',
-                    title: `${nearThreshold.length} contractes just per sota dels llindars legals`,
-                    description: `S'han detectat contractes amb imports entre el 90% i 100% dels llindars (15.000EUR o 40.000EUR). Aixo podria indicar fraccionament de contractes per evitar procediments mes rigorosos.`
-                });
+            // Helper: extract fiscal year from date
+            function getFiscalYear(dateStr) {
+                const match = dateStr.match(/\d{4}/);
+                return match ? match[0] : null;
             }
 
-            // 3. Contract splitting detection (evidence-based methodology)
-            // Based on IACRC, Open Contracting Partnership, and Transparency International guidelines:
-            // - Look for contracts within 30-day window (not just same day)
-            // - Flag when combined value exceeds legal thresholds
-            // - Flag when multiple contracts are clustered just under thresholds
+            // Helper: extract CPV prefix (first 2-4 digits = sector)
+            function getCpvSector(cpv) {
+                if (!cpv) return null;
+                const match = cpv.toString().match(/^(\d{2,4})/);
+                return match ? match[1] : null;
+            }
 
-            const orgCompanyGroups = {};
+            // ----------------------------------------------------------
+            // 1. CONTRACT SPLITTING (Fraccionament de Contractes)
+            // Group by: NIF + CPV sector + Fiscal Year
+            // Flag if combined value exceeds threshold
+            // ----------------------------------------------------------
+            const splittingGroups = {};
             filteredContracts.forEach(c => {
-                if (c.normalized.company && c.normalized.org && c.normalized.date) {
-                    const key = `${c.normalized.org}|||${c.normalized.company}`;
-                    if (!orgCompanyGroups[key]) {
-                        orgCompanyGroups[key] = {
-                            org: c.normalized.org,
+                const nif = c.normalized.nif;
+                const cpvSector = getCpvSector(c.normalized.cpv) || 'unknown';
+                const year = getFiscalYear(c.normalized.date) || 'unknown';
+
+                if (nif && c.normalized.amount > 0 && c.normalized.amount < THRESHOLDS.minorWorks) {
+                    const key = `${nif}|||${cpvSector}|||${year}`;
+                    if (!splittingGroups[key]) {
+                        splittingGroups[key] = {
+                            nif: nif,
                             company: c.normalized.company,
-                            contracts: []
+                            cpvSector: cpvSector,
+                            year: year,
+                            contracts: [],
+                            totalAmount: 0
                         };
                     }
-                    orgCompanyGroups[key].contracts.push({
-                        date: parseDate(c.normalized.date),
-                        amount: c.normalized.amount,
-                        dateStr: c.normalized.date
+                    splittingGroups[key].contracts.push(c);
+                    splittingGroups[key].totalAmount += c.normalized.amount;
+                }
+            });
+
+            Object.values(splittingGroups).forEach(group => {
+                if (group.contracts.length < 2) return;
+
+                const allUnderMinor = group.contracts.every(c => c.normalized.amount < THRESHOLDS.minor);
+                const allUnderWorks = group.contracts.every(c => c.normalized.amount < THRESHOLDS.minorWorks);
+
+                // Flag if all contracts under threshold but combined exceeds it
+                if (allUnderMinor && group.totalAmount >= THRESHOLDS.minor) {
+                    alerts.push({
+                        type: 'alert',
+                        title: `Possible fraccionament: ${group.company || group.nif}`,
+                        description: `${group.contracts.length} contractes menors al mateix proveidor (NIF: ${group.nif}) en el sector CPV ${group.cpvSector} durant ${group.year}, amb un total de ${formatAmount(group.totalAmount)} (supera el llindar de 15.000€).`
+                    });
+                } else if (allUnderWorks && group.totalAmount >= THRESHOLDS.minorWorks) {
+                    alerts.push({
+                        type: 'alert',
+                        title: `Possible fraccionament (obres): ${group.company || group.nif}`,
+                        description: `${group.contracts.length} contractes menors al mateix proveidor (NIF: ${group.nif}) en el sector CPV ${group.cpvSector} durant ${group.year}, amb un total de ${formatAmount(group.totalAmount)} (supera el llindar de 40.000€).`
                     });
                 }
             });
 
-            // Analyze each org+company pair for splitting patterns
-            Object.values(orgCompanyGroups).forEach(group => {
-                if (group.contracts.length < 2) return;
+            // ----------------------------------------------------------
+            // 2. STRATEGIC THRESHOLD (Llindar Estrategic)
+            // Flag contracts in suspicious ranges: €14,900-€14,999 or €39,900-€39,999
+            // ----------------------------------------------------------
+            const strategicThreshold = filteredContracts.filter(c => {
+                const amount = c.normalized.amount;
+                return (amount >= 14900 && amount <= 14999) ||
+                       (amount >= 39900 && amount <= 39999);
+            });
 
-                // Sort by date
-                const sorted = group.contracts
-                    .filter(c => c.date) // only valid dates
-                    .sort((a, b) => a.date - b.date);
+            if (strategicThreshold.length > 0) {
+                alerts.push({
+                    type: 'alert',
+                    title: `${strategicThreshold.length} contractes amb import "estrategic"`,
+                    description: `Contractes amb imports entre €14.900-€14.999 o €39.900-€39.999, just per sota dels llindars legals. Risc ALT: podria indicar manipulacio del pressupost per evitar supervisio.`
+                });
+            }
 
-                if (sorted.length < 2) return;
+            // ----------------------------------------------------------
+            // 3. SINGLE BIDDER (Absencia de Competencia)
+            // Open procedures with only 1 bid received
+            // ----------------------------------------------------------
+            const singleBidder = filteredContracts.filter(c => {
+                const isOpen = c.normalized.procedure.toLowerCase().includes('obert');
+                return isOpen && c.normalized.bidsReceived === 1;
+            });
 
-                // Look for contracts within 30-day windows that combined exceed thresholds
-                for (let i = 0; i < sorted.length; i++) {
-                    const windowContracts = [sorted[i]];
-                    const windowStart = sorted[i].date;
+            if (singleBidder.length > 5) {
+                alerts.push({
+                    type: 'warning',
+                    title: `${singleBidder.length} procediments oberts amb un sol licitador`,
+                    description: `Procediments oberts on nomes es va presentar una oferta. Pot indicar que el plec estava fet a mida o que altres empreses van ser descoratjades a participar.`
+                });
+            }
 
-                    // Find all contracts within 30 days of this one
-                    for (let j = i + 1; j < sorted.length; j++) {
-                        const daysDiff = (sorted[j].date - windowStart) / (1000 * 60 * 60 * 24);
-                        if (daysDiff <= 30) {
-                            windowContracts.push(sorted[j]);
-                        } else {
-                            break; // sorted, so no more within window
-                        }
+            // ----------------------------------------------------------
+            // 4. ZERO DISCOUNT (Possible Col·lusio)
+            // Award amount equals budget exactly (in open procedures)
+            // ----------------------------------------------------------
+            const zeroDiscount = filteredContracts.filter(c => {
+                const isOpen = c.normalized.procedure.toLowerCase().includes('obert');
+                const hasBudget = c.normalized.budget > 0;
+                const hasAmount = c.normalized.amount > 0;
+                if (!isOpen || !hasBudget || !hasAmount) return false;
+
+                const difference = Math.abs(c.normalized.budget - c.normalized.amount);
+                const percentDiff = (difference / c.normalized.budget) * 100;
+                return percentDiff < 0.1; // Less than 0.1% difference
+            });
+
+            if (zeroDiscount.length > 3) {
+                alerts.push({
+                    type: 'warning',
+                    title: `${zeroDiscount.length} adjudicacions sense descompte`,
+                    description: `Procediments oberts on l'import adjudicat es exactament igual al pressupost de licitacio (0% descompte). En un mercat competitiu, normalment hi ha alguna rebaixa.`
+                });
+            }
+
+            // ----------------------------------------------------------
+            // 5. SPEED BIDDING (Terminis Sospitosament Curts)
+            // Short time between publication and deadline
+            // ----------------------------------------------------------
+            const speedBidding = filteredContracts.filter(c => {
+                if (!c.normalized.publicationDate || !c.normalized.offerDeadline) return false;
+
+                const pubDate = parseDate(c.normalized.publicationDate);
+                const deadline = parseDate(c.normalized.offerDeadline);
+                if (!pubDate || !deadline) return false;
+
+                const daysDiff = (deadline - pubDate) / (1000 * 60 * 60 * 24);
+                const estimatedValue = c.normalized.budget || c.normalized.amount;
+
+                // High value (>200k) with <15 days, or lower value with <5 days
+                if (estimatedValue > 200000 && daysDiff < 15 && daysDiff > 0) return true;
+                if (estimatedValue <= 200000 && daysDiff < 5 && daysDiff > 0) return true;
+                return false;
+            });
+
+            if (speedBidding.length > 0) {
+                alerts.push({
+                    type: 'alert',
+                    title: `${speedBidding.length} licitacions amb termini molt curt`,
+                    description: `Procediments amb un termini de presentacio d'ofertes sospitosament curt. Nomes algú amb informacio privilegiada podria preparar una oferta valida.`
+                });
+            }
+
+            // ----------------------------------------------------------
+            // 6. DEPARTMENT CONCENTRATION (Concentracio per Departament)
+            // Single vendor receives >50% of a department's budget in one year
+            // ----------------------------------------------------------
+            const deptBudgets = {};
+            const deptVendorAmounts = {};
+
+            filteredContracts.forEach(c => {
+                const dept = c.normalized.department || c.normalized.org;
+                const nif = c.normalized.nif;
+                const year = getFiscalYear(c.normalized.date) || 'unknown';
+
+                if (dept && nif && c.normalized.amount > 0) {
+                    const deptKey = `${dept}|||${year}`;
+                    const vendorKey = `${dept}|||${nif}|||${year}`;
+
+                    deptBudgets[deptKey] = (deptBudgets[deptKey] || 0) + c.normalized.amount;
+
+                    if (!deptVendorAmounts[vendorKey]) {
+                        deptVendorAmounts[vendorKey] = {
+                            dept: dept,
+                            nif: nif,
+                            company: c.normalized.company,
+                            year: year,
+                            amount: 0
+                        };
                     }
-
-                    if (windowContracts.length >= 2) {
-                        const totalAmount = windowContracts.reduce((sum, c) => sum + c.amount, 0);
-                        const allUnderMinor = windowContracts.every(c => c.amount < THRESHOLDS.minor);
-                        const allUnderMinorWorks = windowContracts.every(c => c.amount < THRESHOLDS.minorWorks);
-
-                        // Red flag: multiple contracts all under threshold, but combined exceeds it
-                        const exceedsMinorThreshold = allUnderMinor && totalAmount >= THRESHOLDS.minor;
-                        const exceedsWorksThreshold = allUnderMinorWorks && totalAmount >= THRESHOLDS.minorWorks;
-
-                        if (exceedsMinorThreshold || exceedsWorksThreshold) {
-                            const threshold = exceedsWorksThreshold ? THRESHOLDS.minorWorks : THRESHOLDS.minor;
-                            const thresholdName = exceedsWorksThreshold ? '40.000€ (obres)' : '15.000€ (serveis)';
-
-                            alerts.push({
-                                type: 'alert',
-                                title: `Possible fraccionament: ${group.company}`,
-                                description: `${windowContracts.length} contractes de "${group.org}" a aquesta empresa en 30 dies (${windowContracts[0].dateStr} - ${windowContracts[windowContracts.length-1].dateStr}), tots per sota del llindar de ${thresholdName} pero amb un total de ${formatAmount(totalAmount)} que el supera.`
-                            });
-
-                            // Skip ahead to avoid duplicate alerts for overlapping windows
-                            i += windowContracts.length - 1;
-                            break;
-                        }
-                    }
+                    deptVendorAmounts[vendorKey].amount += c.normalized.amount;
                 }
             });
 
-            // 4. Contracts without proper company identification
+            Object.values(deptVendorAmounts).forEach(v => {
+                const deptKey = `${v.dept}|||${v.year}`;
+                const deptTotal = deptBudgets[deptKey] || 0;
+
+                if (deptTotal > 50000 && v.amount > deptTotal * 0.5) {
+                    const percentage = ((v.amount / deptTotal) * 100).toFixed(1);
+                    alerts.push({
+                        type: 'warning',
+                        title: `Concentracio: ${v.company || v.nif} al ${v.dept.substring(0, 40)}...`,
+                        description: `Aquest proveidor rep el ${percentage}% del pressupost del departament durant ${v.year} (${formatAmount(v.amount)} de ${formatAmount(deptTotal)}).`
+                    });
+                }
+            });
+
+            // ----------------------------------------------------------
+            // 7. MISSING IDENTIFICATION (Original indicator - kept)
+            // ----------------------------------------------------------
             const noNIF = filteredContracts.filter(c => !c.normalized.nif && c.normalized.amount > 5000);
             if (noNIF.length > 10) {
                 alerts.push({
-                    type: 'warning',
-                    title: `${noNIF.length} contractes sense NIF/CIF de l'adjudicatari`,
-                    description: `Alguns contractes no tenen identificacio fiscal de l'empresa adjudicataria.`
+                    type: 'info',
+                    title: `${noNIF.length} contractes sense NIF/CIF`,
+                    description: `Alguns contractes de mes de 5.000€ no tenen identificacio fiscal de l'empresa adjudicataria.`
                 });
             }
 
