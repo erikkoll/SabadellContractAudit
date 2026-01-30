@@ -924,23 +924,36 @@
                 });
             }
 
-            // 3. Same company winning contracts on same/consecutive days
-            const companyDates = {};
+            // 3. Potential contract splitting: same org + same company + same day
+            // This is more suspicious than just same company/same day
+            const orgCompanyDateGroups = {};
             filteredContracts.forEach(c => {
-                const key = c.normalized.company;
-                if (key) {
-                    if (!companyDates[key]) companyDates[key] = [];
-                    companyDates[key].push(c.normalized.date);
+                if (c.normalized.company && c.normalized.org && c.normalized.date) {
+                    const key = `${c.normalized.org}|||${c.normalized.company}|||${c.normalized.date}`;
+                    if (!orgCompanyDateGroups[key]) {
+                        orgCompanyDateGroups[key] = {
+                            org: c.normalized.org,
+                            company: c.normalized.company,
+                            date: c.normalized.date,
+                            contracts: [],
+                            totalAmount: 0
+                        };
+                    }
+                    orgCompanyDateGroups[key].contracts.push(c);
+                    orgCompanyDateGroups[key].totalAmount += c.normalized.amount;
                 }
             });
 
-            Object.entries(companyDates).forEach(([company, dates]) => {
-                const sameDayCount = dates.length - new Set(dates).size;
-                if (sameDayCount > 3) {
+            // Only flag groups with 3+ contracts on same day OR high combined value (>30k)
+            Object.values(orgCompanyDateGroups).forEach(group => {
+                const count = group.contracts.length;
+                const isSuspicious = count >= 3 || (count >= 2 && group.totalAmount > 30000);
+
+                if (isSuspicious) {
                     alerts.push({
-                        type: 'info',
-                        title: `Multiples contractes el mateix dia: ${company}`,
-                        description: `Aquesta empresa ha rebut multiples contractes en les mateixes dates. Pot ser normal pero mereix revisio.`
+                        type: 'warning',
+                        title: `Possible fraccionament: ${group.company}`,
+                        description: `${count} contractes adjudicats per "${group.org}" a aquesta empresa el ${group.date}, per un total de ${formatAmount(group.totalAmount)}. Podria indicar fraccionament per evitar llindars.`
                     });
                 }
             });
