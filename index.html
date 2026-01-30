@@ -537,23 +537,27 @@
         };
 
         // Column mappings - ordered by priority (most specific first)
+        // Based on actual CSV from Consorci AOC: denominacio_adjudicatari is company name,
+        // identificacio_adjudicatari is NIF, data_adjudicacio_contracte is date
         const COLUMN_MAPPINGS = {
             org: [
-                'nom_ens', 'nom ens', 'ens', 'nom_organ', 'organ_contractacio',
+                'nom_organ', 'nom_ens', 'nom ens', 'ens', 'organ_contractacio',
                 'organisme', 'entitat', 'administracio'
             ],
             object: [
                 'objecte_contracte', 'objecte contracte', 'objecte', 'descripcio_contracte',
-                'descripcio', 'titol', 'nom_contracte', 'denominacio'
+                'descripcio', 'titol', 'nom_contracte'
             ],
             company: [
+                'denominacio_adjudicatari',  // This is the actual company name in Consorci AOC data
                 'rao_social_adjudicatari', 'rao social adjudicatari', 'nom_adjudicatari',
                 'nom adjudicatari', 'adjudicatari_rao_social', 'empresa_adjudicataria',
-                'nom_empresa', 'rao_social', 'adjudicatari'
+                'nom_empresa', 'rao_social'
             ],
             nif: [
+                'identificacio_adjudicatari',  // This is the actual NIF in Consorci AOC data
                 'nif_adjudicatari', 'nif adjudicatari', 'cif_adjudicatari',
-                'identificador_adjudicatari', 'nif', 'cif'
+                'identificador_adjudicatari'
             ],
             amount: [
                 'import_adjudicacio_amb_iva', 'import_adjudicacio_sense_iva',
@@ -561,8 +565,9 @@
                 'preu_adjudicacio', 'valor_estimat', 'import', 'preu', 'valor'
             ],
             date: [
+                'data_adjudicacio_contracte',  // This is the actual date in Consorci AOC data
                 'data_adjudicacio', 'data adjudicacio', 'data_formalitzacio',
-                'data_publicacio', 'data_inici', 'data'
+                'data_formalitzacio_contracte', 'data_publicacio', 'data_inici', 'data'
             ],
             type: [
                 'tipus_contracte', 'tipus contracte', 'procediment_adjudicacio',
