@@ -571,6 +571,155 @@
             overflow-y: auto;
             word-break: break-all;
         }
+
+        /* Print-friendly styles */
+        @media print {
+            .upload-section, .filters, #pagination,
+            .btn, .debug-panel, footer, .data-source,
+            .instructions, .alert-controls {
+                display: none !important;
+            }
+
+            .vendor-alert-group {
+                break-inside: avoid;
+                margin-bottom: 10px;
+            }
+            .vendor-alert-details {
+                display: block !important;
+            }
+            .toggle-icon {
+                display: none !important;
+            }
+
+            body {
+                background: white;
+                font-size: 11pt;
+            }
+            .container {
+                max-width: 100%;
+                padding: 10px;
+            }
+            header {
+                background: #1a5f7a !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .alerts-section, .company-analysis, .stat-card {
+                box-shadow: none;
+                border: 1px solid #ddd;
+            }
+            .table-container {
+                box-shadow: none;
+            }
+            th {
+                background: #1a5f7a !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .vendor-alert-header {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .badge {
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+
+        /* Alert controls section */
+        .alert-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 20px;
+            align-items: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .alert-filters {
+            display: flex;
+            gap: 8px;
+        }
+
+        .alert-filter-btn {
+            padding: 6px 14px;
+            border: 2px solid;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.85em;
+            transition: all 0.2s;
+            background: transparent;
+        }
+
+        .alert-filter-btn.critical {
+            border-color: #c0392b;
+            color: #c0392b;
+        }
+        .alert-filter-btn.critical.active,
+        .alert-filter-btn.critical:hover {
+            background: #c0392b;
+            color: white;
+        }
+
+        .alert-filter-btn.warning {
+            border-color: #f39c12;
+            color: #f39c12;
+        }
+        .alert-filter-btn.warning.active,
+        .alert-filter-btn.warning:hover {
+            background: #f39c12;
+            color: white;
+        }
+
+        .alert-filter-btn.info {
+            border-color: #3498db;
+            color: #3498db;
+        }
+        .alert-filter-btn.info.active,
+        .alert-filter-btn.info:hover {
+            background: #3498db;
+            color: white;
+        }
+
+        .alert-search {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .alert-search input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 0.9em;
+        }
+
+        .alert-search input:focus {
+            outline: none;
+            border-color: #1a5f7a;
+        }
+
+        .expand-collapse-btns {
+            display: flex;
+            gap: 8px;
+        }
+
+        .expand-collapse-btns button {
+            padding: 6px 12px;
+            font-size: 0.85em;
+        }
+
+        /* Clickable vendor names */
+        .vendor-info h4 {
+            cursor: pointer;
+        }
+        .vendor-info h4:hover {
+            text-decoration: underline;
+            color: #1a5f7a;
+        }
     </style>
 </head>
 <body>
@@ -1728,103 +1877,179 @@
                 }
             });
 
+            // Store alerts globally for filtering
+            window.currentAlerts = alerts;
+            window.currentGlobalAlerts = alerts.filter(a => !a.vendor);
+            window.currentVendorAlerts = alerts.filter(a => a.vendor);
+
             // Render alerts - grouped by vendor
+            renderAlerts();
+        }
+
+        // Alert filter state
+        let activeAlertFilters = { critical: true, warning: true, info: true };
+        let alertSearchTerm = '';
+
+        function toggleAlertFilter(type) {
+            activeAlertFilters[type] = !activeAlertFilters[type];
+            renderAlerts();
+        }
+
+        function searchAlerts(term) {
+            alertSearchTerm = term.toLowerCase();
+            renderAlerts();
+        }
+
+        function expandAllVendors() {
+            document.querySelectorAll('.vendor-alert-group').forEach(g => g.classList.add('expanded'));
+        }
+
+        function collapseAllVendors() {
+            document.querySelectorAll('.vendor-alert-group').forEach(g => g.classList.remove('expanded'));
+        }
+
+        function filterByVendor(company, nif) {
+            // Set search filter to vendor
+            const searchValue = company || nif || '';
+            document.getElementById('search').value = searchValue;
+            applyFilters();
+            // Scroll to contracts table
+            document.getElementById('contracts-body').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+
+        function renderAlerts() {
+            const alerts = window.currentAlerts || [];
             const alertsContainer = document.getElementById('alerts-container');
             document.getElementById('alerts-count').textContent = alerts.length;
 
             if (alerts.length === 0) {
                 alertsContainer.innerHTML = '<p class="alert info"><strong>Cap alerta detectada.</strong> Les dades no mostren patrons sospitosos evidents. Aixo no garanteix l\'absencia d\'irregularitats.</p>';
-            } else {
-                // Separate global alerts from vendor-specific alerts
-                const globalAlerts = alerts.filter(a => !a.vendor);
-                const vendorAlerts = alerts.filter(a => a.vendor);
-
-                // Group vendor alerts by NIF
-                const vendorGroups = {};
-                vendorAlerts.forEach(a => {
-                    const key = a.vendor.nif || a.vendor.company || 'unknown';
-                    if (!vendorGroups[key]) {
-                        vendorGroups[key] = {
-                            nif: a.vendor.nif,
-                            company: a.vendor.company,
-                            alerts: [],
-                            alertCount: 0,
-                            warningCount: 0,
-                            infoCount: 0
-                        };
-                    }
-                    vendorGroups[key].alerts.push(a);
-                    if (a.type === 'alert') vendorGroups[key].alertCount++;
-                    else if (a.type === 'warning') vendorGroups[key].warningCount++;
-                    else vendorGroups[key].infoCount++;
-                });
-
-                // Sort vendor groups by severity (most alerts first)
-                const sortedVendors = Object.values(vendorGroups).sort((a, b) => {
-                    const scoreA = a.alertCount * 100 + a.warningCount * 10 + a.infoCount;
-                    const scoreB = b.alertCount * 100 + b.warningCount * 10 + b.infoCount;
-                    return scoreB - scoreA;
-                });
-
-                let html = '';
-
-                // Summary
-                html += `<div class="alerts-summary">
-                    <div class="summary-item"><strong>${globalAlerts.length}</strong> alertes globals</div>
-                    <div class="summary-item"><strong>${sortedVendors.length}</strong> proveidors amb alertes</div>
-                    <div class="summary-item"><strong>${vendorAlerts.length}</strong> alertes de proveidor</div>
-                </div>`;
-
-                // Global alerts section
-                if (globalAlerts.length > 0) {
-                    html += '<div class="global-alerts"><h3>Alertes Globals (Sistema)</h3>';
-                    html += globalAlerts.map(a => `
-                        <div class="alert ${a.type}">
-                            <h4>${a.title}</h4>
-                            <p>${a.description}</p>
-                        </div>
-                    `).join('');
-                    html += '</div>';
-                }
-
-                // Vendor-grouped alerts section
-                if (sortedVendors.length > 0) {
-                    html += '<div class="vendor-alerts-section"><h3>Alertes per Proveidor (' + sortedVendors.length + ')</h3>';
-
-                    sortedVendors.forEach((group, index) => {
-                        const headerClass = group.alertCount > 0 ? 'has-critical' :
-                                          group.warningCount > 0 ? 'has-warning' : 'has-info';
-
-                        html += `
-                        <div class="vendor-alert-group" id="vendor-group-${index}">
-                            <div class="vendor-alert-header ${headerClass}" onclick="document.getElementById('vendor-group-${index}').classList.toggle('expanded')">
-                                <div class="vendor-info">
-                                    <h4>${group.company || 'Empresa desconeguda'}</h4>
-                                    <span class="nif">${group.nif || 'NIF no disponible'}</span>
-                                </div>
-                                <div class="vendor-badges">
-                                    ${group.alertCount > 0 ? `<span class="badge alert-count">${group.alertCount} crit.</span>` : ''}
-                                    ${group.warningCount > 0 ? `<span class="badge warning-count">${group.warningCount} avis</span>` : ''}
-                                    ${group.infoCount > 0 ? `<span class="badge info-count">${group.infoCount} info</span>` : ''}
-                                    <span class="toggle-icon">▼</span>
-                                </div>
-                            </div>
-                            <div class="vendor-alert-details">
-                                ${group.alerts.map(a => `
-                                    <div class="vendor-alert-item ${a.type}-type">
-                                        <strong>${a.title}</strong>
-                                        <p>${a.description}</p>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </div>`;
-                    });
-
-                    html += '</div>';
-                }
-
-                alertsContainer.innerHTML = html;
+                return;
             }
+
+            // Filter alerts by type
+            const typeMap = { 'alert': 'critical', 'warning': 'warning', 'info': 'info' };
+            const filteredAlerts = alerts.filter(a => {
+                const filterKey = typeMap[a.type] || 'info';
+                return activeAlertFilters[filterKey];
+            });
+
+            // Separate global alerts from vendor-specific alerts
+            const globalAlerts = filteredAlerts.filter(a => !a.vendor);
+            const vendorAlerts = filteredAlerts.filter(a => a.vendor);
+
+            // Group vendor alerts by NIF
+            const vendorGroups = {};
+            vendorAlerts.forEach(a => {
+                const key = a.vendor.nif || a.vendor.company || 'unknown';
+                if (!vendorGroups[key]) {
+                    vendorGroups[key] = {
+                        nif: a.vendor.nif,
+                        company: a.vendor.company,
+                        alerts: [],
+                        alertCount: 0,
+                        warningCount: 0,
+                        infoCount: 0
+                    };
+                }
+                vendorGroups[key].alerts.push(a);
+                if (a.type === 'alert') vendorGroups[key].alertCount++;
+                else if (a.type === 'warning') vendorGroups[key].warningCount++;
+                else vendorGroups[key].infoCount++;
+            });
+
+            // Sort vendor groups by severity (most alerts first)
+            let sortedVendors = Object.values(vendorGroups).sort((a, b) => {
+                const scoreA = a.alertCount * 100 + a.warningCount * 10 + a.infoCount;
+                const scoreB = b.alertCount * 100 + b.warningCount * 10 + b.infoCount;
+                return scoreB - scoreA;
+            });
+
+            // Filter by search term
+            if (alertSearchTerm) {
+                sortedVendors = sortedVendors.filter(g =>
+                    (g.company && g.company.toLowerCase().includes(alertSearchTerm)) ||
+                    (g.nif && g.nif.toLowerCase().includes(alertSearchTerm))
+                );
+            }
+
+            let html = '';
+
+            // Alert controls
+            html += `<div class="alert-controls">
+                <div class="alert-filters">
+                    <button class="alert-filter-btn critical ${activeAlertFilters.critical ? 'active' : ''}" onclick="toggleAlertFilter('critical')">Critiques</button>
+                    <button class="alert-filter-btn warning ${activeAlertFilters.warning ? 'active' : ''}" onclick="toggleAlertFilter('warning')">Avisos</button>
+                    <button class="alert-filter-btn info ${activeAlertFilters.info ? 'active' : ''}" onclick="toggleAlertFilter('info')">Info</button>
+                </div>
+                <div class="alert-search">
+                    <input type="text" placeholder="Cercar proveidor..." value="${alertSearchTerm}" oninput="searchAlerts(this.value)">
+                </div>
+                <div class="expand-collapse-btns">
+                    <button class="btn btn-secondary" onclick="expandAllVendors()">Expandir tot</button>
+                    <button class="btn btn-secondary" onclick="collapseAllVendors()">Contraure tot</button>
+                </div>
+            </div>`;
+
+            // Summary
+            html += `<div class="alerts-summary">
+                <div class="summary-item"><strong>${globalAlerts.length}</strong> alertes globals</div>
+                <div class="summary-item"><strong>${sortedVendors.length}</strong> proveidors amb alertes</div>
+                <div class="summary-item"><strong>${vendorAlerts.length}</strong> alertes de proveidor</div>
+            </div>`;
+
+            // Global alerts section
+            if (globalAlerts.length > 0) {
+                html += '<div class="global-alerts"><h3>Alertes Globals (Sistema)</h3>';
+                html += globalAlerts.map(a => `
+                    <div class="alert ${a.type}">
+                        <h4>${a.title}</h4>
+                        <p>${a.description}</p>
+                    </div>
+                `).join('');
+                html += '</div>';
+            }
+
+            // Vendor-grouped alerts section
+            if (sortedVendors.length > 0) {
+                html += '<div class="vendor-alerts-section"><h3>Alertes per Proveidor (' + sortedVendors.length + ')</h3>';
+
+                sortedVendors.forEach((group, index) => {
+                    const headerClass = group.alertCount > 0 ? 'has-critical' :
+                                      group.warningCount > 0 ? 'has-warning' : 'has-info';
+
+                    const escapedCompany = (group.company || '').replace(/'/g, "\\'");
+                    const escapedNif = (group.nif || '').replace(/'/g, "\\'");
+
+                    html += `
+                    <div class="vendor-alert-group" id="vendor-group-${index}" data-company="${group.company || ''}" data-nif="${group.nif || ''}">
+                        <div class="vendor-alert-header ${headerClass}">
+                            <div class="vendor-info" onclick="event.stopPropagation(); filterByVendor('${escapedCompany}', '${escapedNif}')">
+                                <h4>${group.company || 'Empresa desconeguda'}</h4>
+                                <span class="nif">${group.nif || 'NIF no disponible'}</span>
+                            </div>
+                            <div class="vendor-badges" onclick="document.getElementById('vendor-group-${index}').classList.toggle('expanded')">
+                                ${group.alertCount > 0 ? `<span class="badge alert-count">${group.alertCount} crit.</span>` : ''}
+                                ${group.warningCount > 0 ? `<span class="badge warning-count">${group.warningCount} avis</span>` : ''}
+                                ${group.infoCount > 0 ? `<span class="badge info-count">${group.infoCount} info</span>` : ''}
+                                <span class="toggle-icon">▼</span>
+                            </div>
+                        </div>
+                        <div class="vendor-alert-details">
+                            ${group.alerts.map(a => `
+                                <div class="vendor-alert-item ${a.type}-type">
+                                    <strong>${a.title}</strong>
+                                    <p>${a.description}</p>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>`;
+                });
+
+                html += '</div>';
+            }
+
+            alertsContainer.innerHTML = html;
 
             // Render top companies
             const topCompaniesContainer = document.getElementById('top-companies');
