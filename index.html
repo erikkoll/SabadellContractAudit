@@ -785,6 +785,20 @@
 
             <div class="alerts-section" id="alerts-section">
                 <h2>Alertes i Indicadors de Risc</h2>
+                <div class="alert-controls" id="alert-controls" style="display: none;">
+                    <div class="alert-filters">
+                        <button class="alert-filter-btn critical active" id="filter-critical" onclick="toggleAlertFilter('critical')">Critiques</button>
+                        <button class="alert-filter-btn warning active" id="filter-warning" onclick="toggleAlertFilter('warning')">Avisos</button>
+                        <button class="alert-filter-btn info active" id="filter-info" onclick="toggleAlertFilter('info')">Info</button>
+                    </div>
+                    <div class="alert-search">
+                        <input type="text" id="alert-search-input" placeholder="Cercar proveidor..." oninput="searchAlerts(this.value)">
+                    </div>
+                    <div class="expand-collapse-btns">
+                        <button class="btn btn-secondary" onclick="expandAllVendors()">Expandir tot</button>
+                        <button class="btn btn-secondary" onclick="collapseAllVendors()">Contraure tot</button>
+                    </div>
+                </div>
                 <div id="alerts-container">
                     <p class="loading">Analitzant dades...</p>
                 </div>
@@ -1896,7 +1910,7 @@
         }
 
         function searchAlerts(term) {
-            alertSearchTerm = term.toLowerCase();
+            alertSearchTerm = (term || '').toLowerCase();
             renderAlerts();
         }
 
@@ -1920,12 +1934,20 @@
         function renderAlerts() {
             const alerts = window.currentAlerts || [];
             const alertsContainer = document.getElementById('alerts-container');
+            const alertControls = document.getElementById('alert-controls');
             document.getElementById('alerts-count').textContent = alerts.length;
 
             if (alerts.length === 0) {
+                alertControls.style.display = 'none';
                 alertsContainer.innerHTML = '<p class="alert info"><strong>Cap alerta detectada.</strong> Les dades no mostren patrons sospitosos evidents. Aixo no garanteix l\'absencia d\'irregularitats.</p>';
                 return;
             }
+
+            // Show controls and update button states
+            alertControls.style.display = 'flex';
+            document.getElementById('filter-critical').classList.toggle('active', activeAlertFilters.critical);
+            document.getElementById('filter-warning').classList.toggle('active', activeAlertFilters.warning);
+            document.getElementById('filter-info').classList.toggle('active', activeAlertFilters.info);
 
             // Filter alerts by type
             const typeMap = { 'alert': 'critical', 'warning': 'warning', 'info': 'info' };
@@ -1974,22 +1996,6 @@
             }
 
             let html = '';
-
-            // Alert controls
-            html += `<div class="alert-controls">
-                <div class="alert-filters">
-                    <button class="alert-filter-btn critical ${activeAlertFilters.critical ? 'active' : ''}" onclick="toggleAlertFilter('critical')">Critiques</button>
-                    <button class="alert-filter-btn warning ${activeAlertFilters.warning ? 'active' : ''}" onclick="toggleAlertFilter('warning')">Avisos</button>
-                    <button class="alert-filter-btn info ${activeAlertFilters.info ? 'active' : ''}" onclick="toggleAlertFilter('info')">Info</button>
-                </div>
-                <div class="alert-search">
-                    <input type="text" placeholder="Cercar proveidor..." value="${alertSearchTerm}" oninput="searchAlerts(this.value)">
-                </div>
-                <div class="expand-collapse-btns">
-                    <button class="btn btn-secondary" onclick="expandAllVendors()">Expandir tot</button>
-                    <button class="btn btn-secondary" onclick="collapseAllVendors()">Contraure tot</button>
-                </div>
-            </div>`;
 
             // Summary
             html += `<div class="alerts-summary">
